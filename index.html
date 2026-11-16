@@ -137,7 +137,7 @@
     var alvo = document.getElementById("lista-planos");
     alvo.innerHTML = (C.PLANOS || []).map(function (p) {
       return '<div class="plano' + (p.destaque ? ' destaque' : '') + '">' +
-        (p.destaque ? '<span class="plano-selo">Mais escolhido</span>' : '') +
+        (p.destaque ? '<span class="plano-selo">Recomendado</span>' : '') +
         '<h3>' + esc(p.nome) + '</h3>' +
         '<p class="preco"><b>' + brl(p.preco) + '</b><span>/mês</span></p>' +
         '<p class="plano-resumo">' + esc(p.resumo) + '</p>' +
