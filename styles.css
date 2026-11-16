@@ -115,3 +115,11 @@ textarea { min-height: 80px; resize: vertical; }
 .modal-bg { position: fixed; inset: 0; background: rgba(13,27,42,.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
 .modal { background: var(--surface); border-radius: var(--radius); padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
 .modal p { margin-top: 0; }
+
+.cnpj-box { display: flex; gap: 8px; }
+.cnpj-box input { flex: 1; }
+.cnpj-res { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-top: 4px; }
+.cnpj-res .badge { margin: 4px 4px 0 0; }
+.cenarios .card { margin-bottom: 0; }
+.cenarios { margin-bottom: 18px; }
+tr.marcada td { background: var(--accent-soft); }

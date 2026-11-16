@@ -38,6 +38,8 @@
     divAliqAtual: 10,
     divBase: 'total',
     divAliqPL: 15,
+    irPF: 27.5,
+    inssAutonomo: 20,
   };
 
   // ---------------------------------------------------------------- utilidades
@@ -101,6 +103,91 @@
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  // ---------------------------------------------------------------- consulta de CNPJ (Simples Nacional / MEI)
+  // Usa dados públicos da Receita Federal via BrasilAPI e, se falhar, via CNPJá (API aberta).
+  const soNumeros = (s) => String(s || '').replace(/\D/g, '');
+  const formatarCNPJ = (d) => d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+
+  function cnpjValido(d) {
+    if (!/^\d{14}$/.test(d) || /^(\d)\1{13}$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0, peso = base.length - 7;
+      for (let i = 0; i < base.length; i++) { soma += Number(base[i]) * peso--; if (peso < 2) peso = 9; }
+      const r = soma % 11;
+      return r < 2 ? 0 : 11 - r;
+    };
+    return dv(d.slice(0, 12)) === Number(d[12]) && dv(d.slice(0, 13)) === Number(d[13]);
+  }
+
+  function buscarComLimite(url) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    return fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+  }
+
+  async function buscarCNPJ(entrada) {
+    const d = soNumeros(entrada);
+    if (d.length !== 14) throw new Error('O CNPJ precisa ter 14 números. Ele aparece na nota fiscal do fornecedor.');
+    if (!cnpjValido(d)) throw new Error('Esse CNPJ não é válido. Confira os números.');
+    try {
+      const r = await buscarComLimite('https://brasilapi.com.br/api/cnpj/v1/' + d);
+      if (r.status === 404) throw Object.assign(new Error('CNPJ não encontrado na Receita Federal.'), { definitivo: true });
+      if (r.ok) {
+        const j = await r.json();
+        return {
+          cnpj: d, razao: j.razao_social || '', fantasia: j.nome_fantasia || '', situacao: j.descricao_situacao_cadastral || '',
+          simples: j.opcao_pelo_simples === true, mei: j.opcao_pelo_mei === true, desde: j.data_opcao_pelo_simples || '', fonte: 'BrasilAPI',
+        };
+      }
+    } catch (e) { if (e.definitivo) throw e; }
+    const r2 = await buscarComLimite('https://open.cnpja.com/office/' + d);
+    if (!r2.ok) throw new Error('Não foi possível consultar agora. Tente de novo em alguns minutos.');
+    const j = await r2.json();
+    const emp = j.company || {};
+    return {
+      cnpj: d, razao: emp.name || '', fantasia: j.alias || '', situacao: (j.status && j.status.text) || '',
+      simples: !!(emp.simples && emp.simples.optant), mei: !!(emp.simei && emp.simei.optant), desde: (emp.simples && emp.simples.since) || '', fonte: 'CNPJá',
+    };
+  }
+
+  // 'mei' | 'simples' | 'regular'
+  const tipoEmpresa = (info) => (info.mei ? 'mei' : info.simples ? 'simples' : 'regular');
+
+  function htmlResultadoCNPJ(info) {
+    const tipo = tipoEmpresa(info);
+    const selo = tipo === 'mei'
+      ? '<span class="badge warn">MEI (Simples): praticamente não gera crédito</span>'
+      : tipo === 'simples'
+        ? `<span class="badge warn">Optante do Simples Nacional${info.desde ? ' desde ' + dataBR(info.desde) : ''}: crédito pequeno ou nenhum</span>`
+        : '<span class="badge ok">Não é do Simples: gera crédito cheio</span>';
+    return `<div class="cnpj-res"><b>${esc(info.razao)}</b>${info.fantasia ? ` <span class="muted">(${esc(info.fantasia)})</span>` : ''}
+      <div>${selo} ${info.situacao ? `<span class="badge">Situação: ${esc(info.situacao)}</span>` : ''}</div>
+      <div class="muted small">CNPJ ${formatarCNPJ(info.cnpj)} · fonte: ${esc(info.fonte)} (dados públicos da Receita Federal, podem ter alguns dias de atraso)</div></div>`;
+  }
+
+  // Bloco reutilizável: campo + botão. Ao achar a empresa, chama cnpjRetornos[prefixo](info).
+  const cnpjRetornos = {};
+  const blocoCnpj = (prefixo, rotulo) => `
+    <label>${rotulo || 'CNPJ da empresa'}</label>
+    <div class="cnpj-box"><input id="${prefixo}-input" data-cnpj="${prefixo}" placeholder="00.000.000/0000-00" inputmode="numeric">
+      <button type="button" class="btn secondary" data-action="consultarCnpj" data-id="${prefixo}">Consultar</button></div>
+    <div id="${prefixo}-res" class="small" style="margin-top:6px"></div>`;
+
+  async function consultarCnpj(prefixo) {
+    const input = document.getElementById(prefixo + '-input');
+    const res = document.getElementById(prefixo + '-res');
+    if (!input || !res) return;
+    res.innerHTML = '<span class="muted">Consultando a Receita Federal…</span>';
+    try {
+      const info = await buscarCNPJ(input.value);
+      input.value = formatarCNPJ(info.cnpj);
+      res.innerHTML = htmlResultadoCNPJ(info);
+      if (cnpjRetornos[prefixo]) cnpjRetornos[prefixo](info);
+    } catch (e) {
+      res.innerHTML = `<span class="badge warn">${esc(e.name === 'AbortError' || e instanceof TypeError ? 'Não foi possível consultar agora (sem conexão ou serviço fora do ar).' : e.message)}</span>`;
+    }
   }
 
   // ---------------------------------------------------------------- dados
@@ -252,7 +339,7 @@
       <tr>
         <td>${dataBR(l.data)}</td>
         ${opts.mostrarCliente ? `<td><a href="#/clientes/${l.clienteId}">${esc(nomeCliente(l.clienteId))}</a></td>` : ''}
-        <td>${esc(l.descricao)}${l.anexo ? `<div class="muted small">📎 ${esc(l.anexo)}</div>` : ''}</td>
+        <td>${esc(l.descricao)}${l.fornecedorNome ? `<div class="muted small">Fornecedor: ${esc(l.fornecedorNome)} · ${l.fornecedorTipo === 'regular' ? 'fora do Simples' : l.fornecedorTipo === 'mei' ? 'MEI' : 'Simples Nacional'}</div>` : ''}${l.anexo ? `<div class="muted small">📎 ${esc(l.anexo)}</div>` : ''}</td>
         <td>${esc(CATEGORIAS[l.categoria] || l.categoria)}</td>
         <td class="num">${brl(l.valor)}</td>
         <td>${badgeStatus(l.status)}</td>
@@ -321,7 +408,10 @@
       <form class="card" id="form-cliente">
         <div class="fields">
           <div class="full"><label>Nome / razão social</label><input name="nome" required value="${esc(v.nome)}"></div>
-          <div><label>CNPJ ou CPF</label><input name="cnpj" value="${esc(v.cnpj)}"></div>
+          <div><label>CNPJ ou CPF</label>
+            <div class="cnpj-box"><input name="cnpj" id="cli-cnpj-input" data-cnpj="cli-cnpj" value="${esc(v.cnpj)}">
+              <button type="button" class="btn secondary" data-action="consultarCnpj" data-id="cli-cnpj">Buscar dados</button></div>
+            <div id="cli-cnpj-res" class="small" style="margin-top:6px"></div></div>
           <div><label>Faturamento médio mensal (R$)</label><input name="faturamento" type="number" step="0.01" min="0" value="${esc(v.faturamento)}"></div>
           <div><label>Regime tributário</label><select name="regime">${opcoes(REGIMES, v.regime)}</select></div>
           <div><label>Setor <span class="hint">(define a redução na reforma)</span></label><select name="setor">${opcoes(SETORES, v.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select></div>
@@ -331,6 +421,12 @@
         </div>
         <div class="form-foot"><button class="btn" type="submit">Salvar</button><a class="btn secondary" href="${c ? '#/clientes/' + c.id : '#/clientes'}">Cancelar</a></div>
       </form>`;
+    cnpjRetornos['cli-cnpj'] = (info) => {
+      const f = document.getElementById('form-cliente');
+      if (!f.elements.nome.value.trim()) f.elements.nome.value = info.razao;
+      if (info.simples || info.mei) f.elements.regime.value = 'simples';
+      else if (f.elements.regime.value === 'simples') f.elements.regime.value = 'presumido';
+    };
     document.getElementById('form-cliente').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -502,6 +598,156 @@
     return out.join('\n');
   }
 
+  // --- cenários PF x PJ
+  /*
+   * Situações práticas com cálculo lado a lado.
+   * Premissa: o crédito de quem compra é igual ao imposto cobrado pelo fornecedor
+   * (alíquota cheia para fornecedor fora do Simples, reduzida se o setor dele tiver redução).
+   */
+  function calcularCenarios(v, p) {
+    const aliqCheia = p.cbs + (v.comIbs ? p.ibs : 0);
+    const aliqSetor = (setor) => aliqCheia * (1 - (SETORES[setor] || SETORES.geral).reducao / 100);
+    const pc = (valor, aliq) => valor * aliq / 100;
+
+    const compra = [
+      { id: 'pf', nome: 'Pessoa física (autônomo, sem empresa)', credito: 0 },
+      { id: 'mei', nome: 'MEI', credito: 0 },
+      { id: 'simples', nome: 'Empresa do Simples Nacional', credito: pc(v.c1Valor, p.creditoSimples) },
+      { id: 'simplesFora', nome: 'Empresa do Simples que paga CBS/IBS "por fora"', credito: pc(v.c1Valor, aliqCheia) },
+      { id: 'regular', nome: 'Empresa fora do Simples (Presumido ou Real)', credito: pc(v.c1Valor, aliqCheia) },
+    ].map((o) => Object.assign(o, { custo: v.c1Valor - o.credito }));
+
+    const despesaPF = v.c2Dedutivel ? pc(v.c2Valor, v.c2IR) : 0;
+    const despesaPJ = v.c2Regime === 'simples' ? 0 : pc(v.c2Valor, aliqCheia);
+
+    const impostoVenda = pc(v.c3Valor, aliqSetor(v.setor));
+
+    const inss = pc(v.c4Valor, p.inssAutonomo);
+    const parceiro = [
+      { id: 'pf', nome: 'Pessoa física (recibo/RPA)', credito: 0, extra: inss, obs: `+ INSS da empresa (${pct(p.inssAutonomo)})` },
+      { id: 'simples', nome: 'PJ do Simples Nacional (emite nota)', credito: pc(v.c4Valor, p.creditoSimples), extra: 0, obs: '' },
+      { id: 'regular', nome: 'PJ fora do Simples (emite nota)', credito: pc(v.c4Valor, aliqSetor(v.c4Setor)), extra: 0, obs: '' },
+    ].map((o) => Object.assign(o, { custo: v.c4Valor + o.extra - o.credito }));
+
+    const div = calcularDividendos(v.c6Valor, p);
+    return { aliqCheia, aliqSetorVenda: aliqSetor(v.setor), compra, despesaPF, despesaPJ, impostoVenda, parceiro, div };
+  }
+
+  function viewCenarios() {
+    const p = db.params;
+    const campo = (nome, rot, val) => `<div><label>${rot}</label><input name="${nome}" type="number" step="0.01" min="0" value="${val}"></div>`;
+    $app.innerHTML = `
+      <header class="page-head">
+        <div><h1>Cenários PF x PJ</h1><p class="muted">Situações do dia a dia: de quem comprar, em nome de quem lançar, para quem vender e como pagar parceiros.</p></div>
+      </header>
+      <section class="card">
+        <h2>🔎 A empresa de quem vou comprar é do Simples?</h2>
+        <p class="muted small" style="margin-top:-6px">Digite o CNPJ que aparece na nota fiscal ou no orçamento. A busca pelo nome da empresa não é possível em consultas gratuitas.</p>
+        ${blocoCnpj('cen-cnpj', 'CNPJ do fornecedor')}
+      </section>
+      <form id="form-cen">
+        <section class="card">
+          <div class="fields">
+            <div><label>Setor da sua empresa</label><select name="setor">${opcoes(SETORES, 'saude', (s) => `${s.nome} (redução ${s.reducao}%)`)}</select></div>
+            <div><label>Quais tributos considerar</label><select name="escopo">
+              <option value="cbs">Só CBS (substitui PIS/COFINS, vale a partir de 2027)</option>
+              <option value="cbs_ibs">CBS + IBS (regime completo, a partir de 2033)</option></select></div>
+          </div>
+        </section>
+        <div class="grid-2 cenarios">
+          <section class="card"><h2>1. De quem comprar?</h2>
+            <p class="muted small">Uma mesma compra gera créditos diferentes conforme quem vende.</p>
+            ${campo('c1Valor', 'Valor da compra (R$)', 10000)}
+            <div id="r1"></div></section>
+          <section class="card"><h2>2. Lançar a despesa no CPF ou no CNPJ?</h2>
+            <p class="muted small">Hoje muita despesa vai para a PF (livro-caixa/carnê-leão). Com a reforma, na PJ ela pode gerar crédito.</p>
+            <div class="fields">
+              ${campo('c2Valor', 'Valor da despesa (R$)', 5000)}
+              ${campo('c2IR', 'Sua alíquota de IR na PF (%)', p.irPF)}
+              <div><label>Regime da empresa</label><select name="c2Regime"><option value="regular">Fora do Simples</option><option value="simples">Simples Nacional</option></select></div>
+              <div><label>Dedutível no livro-caixa?</label><select name="c2Dedutivel"><option value="1">Sim</option><option value="0">Não</option></select></div>
+            </div>
+            <div id="r2"></div></section>
+          <section class="card"><h2>3. Vender para PF ou para PJ?</h2>
+            <p class="muted small">O seu imposto é o mesmo. A diferença é quanto o cliente recupera.</p>
+            ${campo('c3Valor', 'Valor da venda ou serviço (R$)', 1000)}
+            <div id="r3"></div></section>
+          <section class="card"><h2>4. Pagar um parceiro como PF ou PJ?</h2>
+            <p class="muted small">Exemplo: dentista que recebe repasse por atendimento.</p>
+            <div class="fields">
+              ${campo('c4Valor', 'Valor do repasse no mês (R$)', 8000)}
+              <div><label>Setor do parceiro</label><select name="c4Setor">${opcoes(SETORES, 'saude', (s) => s.nome)}</select></div>
+            </div>
+            <div id="r4"></div></section>
+          <section class="card"><h2>5. Funcionário CLT ou PJ?</h2>
+            <p>A <b>folha de pagamento não gera crédito</b> de CBS/IBS. Trocar um funcionário CLT por PJ só para gerar crédito normalmente <b>não compensa</b>:</p>
+            <ul>
+              <li>o ganho de crédito costuma ser pequeno perto dos outros custos;</li>
+              <li>se a pessoa trabalha com horário, chefe e rotina de funcionário, há <b>risco trabalhista</b> (reconhecimento de vínculo).</li>
+            </ul>
+            <p class="muted small">Decisão para tomar sempre com o contador.</p></section>
+          <section class="card"><h2>6. Tirar o lucro da empresa para o CPF</h2>
+            ${campo('c6Valor', 'Lucro distribuído no mês, por sócio (R$)', 60000)}
+            <div id="r6"></div></section>
+        </div>
+      </form>
+      <div class="note info">Estimativas com alíquotas de referência ainda não definitivas (ajuste em <a href="#/config">Parâmetros</a>). Servem para comparar caminhos, não substituem o contador.</div>`;
+
+    const form = document.getElementById('form-cen');
+    let destaque = null;
+    const linhaTabela = (cols, marcada) => `<tr class="${marcada ? 'marcada' : ''}">${cols.join('')}</tr>`;
+    const atualizar = () => {
+      const f = new FormData(form);
+      const v = {
+        setor: f.get('setor'), comIbs: f.get('escopo') === 'cbs_ibs',
+        c1Valor: num(f.get('c1Valor')), c2Valor: num(f.get('c2Valor')), c2IR: num(f.get('c2IR')), c2Regime: f.get('c2Regime'),
+        c2Dedutivel: f.get('c2Dedutivel') === '1', c3Valor: num(f.get('c3Valor')), c4Valor: num(f.get('c4Valor')), c4Setor: f.get('c4Setor'),
+        c6Valor: num(f.get('c6Valor')),
+      };
+      const r = calcularCenarios(v, p);
+
+      const melhorCompra = Math.min.apply(null, r.compra.map((o) => o.custo));
+      document.getElementById('r1').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Fornecedor</th><th class="num">Crédito</th><th class="num">Custo real</th></tr></thead>
+        <tbody>${r.compra.map((o) => linhaTabela([`<td>${esc(o.nome)}</td>`, `<td class="num">${brl(o.credito)}</td>`, `<td class="num">${o.custo === melhorCompra ? '<b>' + brl(o.custo) + '</b>' : brl(o.custo)}</td>`], destaque === o.id)).join('')}</tbody></table></div>
+        <p class="small">Comprando de empresa fora do Simples, você recupera <b>${brl(r.compra[4].credito)}</b> (${pct(r.aliqCheia)}). Se o preço do fornecedor do Simples for até ${brl(r.compra[4].custo)}, ele ainda sai mais barato.</p>
+        <p class="muted small">Se o fornecedor tiver redução no setor dele, o crédito é menor. Compras no CPF não geram crédito para a empresa.</p>`;
+
+      const ganhaPJ = r.despesaPJ > r.despesaPF;
+      document.getElementById('r2').innerHTML = `<table class="calc-lines"><tbody>
+        <tr class="${!ganhaPJ ? 'marcada' : ''}"><td>No CPF (livro-caixa): reduz o IR</td><td class="num">${brl(r.despesaPF)}</td></tr>
+        <tr class="${ganhaPJ ? 'marcada' : ''}"><td>No CNPJ: crédito de ${v.comIbs ? 'CBS/IBS' : 'CBS'}</td><td class="num">${brl(r.despesaPJ)}</td></tr></tbody></table>
+        <p class="small"><b>${r.despesaPF === r.despesaPJ ? 'Empate.' : ganhaPJ ? 'Vale mais lançar no CNPJ' : 'Vale mais lançar no CPF'}</b>${r.despesaPF !== r.despesaPJ ? `: economia de ${brl(Math.abs(r.despesaPJ - r.despesaPF))} a mais.` : ''}</p>
+        <p class="muted small">Atenção: na PJ só entram despesas da atividade da empresa. Lançar gasto pessoal na PJ para gerar crédito não é permitido. Lembre também que receita tirada do livro-caixa e passada para a PJ vira receita da empresa.</p>`;
+
+      document.getElementById('r3').innerHTML = `<table class="calc-lines"><tbody>
+        <tr><td>Seu imposto sobre a venda (${pct(r.aliqSetorVenda)})</td><td class="num">${brl(r.impostoVenda)}</td></tr>
+        <tr><td>Cliente <b>pessoa física</b>: custo real para ele</td><td class="num">${brl(v.c3Valor)}</td></tr>
+        <tr><td>Cliente <b>empresa fora do Simples</b>: recupera ${brl(r.impostoVenda)} de crédito, custo real</td><td class="num">${brl(v.c3Valor - r.impostoVenda)}</td></tr></tbody></table>
+        <p class="muted small">Para empresas clientes, quem gera crédito fica mais competitivo. Se a sua empresa for do Simples, o cliente PJ recupera pouco ou nada; por isso existe a opção de pagar CBS/IBS "por fora" do Simples.</p>`;
+
+      const melhorParc = Math.min.apply(null, r.parceiro.map((o) => o.custo));
+      document.getElementById('r4').innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>Forma de pagamento</th><th class="num">Crédito</th><th class="num">Custo real</th></tr></thead>
+        <tbody>${r.parceiro.map((o) => `<tr class="${o.custo === melhorParc ? 'marcada' : ''}"><td>${esc(o.nome)}${o.obs ? `<div class="muted small">${esc(o.obs)}: ${brl(o.extra)}</div>` : ''}</td><td class="num">${brl(o.credito)}</td><td class="num">${brl(o.custo)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="muted small">Com o parceiro PJ emitindo nota para a empresa, o crédito fica com a empresa. Ele recebe o valor cheio na PJ dele e paga os próprios impostos ao transferir para o CPF. Avalie com o contador o risco de vínculo.</p>`;
+
+      document.getElementById('r6').innerHTML = `<table class="calc-lines"><tbody>
+        <tr><td>Regra atual: isento até ${brl(p.divLimite)}/mês; acima disso, ${pct(p.divAliqAtual)} sobre o ${p.divBase === 'excedente' ? 'excedente' : 'total'}</td><td class="num">${brl(r.div.atual)}</td></tr>
+        <tr><td>Cenário do projeto de lei: ${pct(p.divAliqPL)} retido sobre qualquer valor</td><td class="num">${brl(r.div.pl)}</td></tr></tbody></table>
+        <p class="muted small">O imposto retido na fonte pode ser ajustado na declaração anual.</p>`;
+    };
+    form.addEventListener('input', atualizar);
+    form.addEventListener('change', atualizar);
+    form.addEventListener('submit', (e) => e.preventDefault());
+    cnpjRetornos['cen-cnpj'] = (info) => {
+      const t = tipoEmpresa(info);
+      destaque = t === 'regular' ? 'regular' : t;
+      atualizar();
+    };
+    atualizar();
+  }
+
   // --- portal do cliente
   function viewPortalEscolha() {
     $app.innerHTML = `
@@ -527,6 +773,7 @@
         <form class="card" id="form-lanc">
           <h2>Enviar nota ou despesa</h2>
           <div class="fields">
+            <div class="full">${blocoCnpj('portal-cnpj', 'CNPJ do fornecedor <span class="hint">(opcional: descobre se é do Simples)</span>')}</div>
             <div class="full"><label>Tipo</label><select name="categoria">${opcoes(CATEGORIAS, 'fornecedor')}</select></div>
             <div class="full"><label>Descrição</label><input name="descricao" required placeholder="Ex.: Materiais de consumo — fornecedor X"></div>
             <div><label>Valor (R$)</label><input name="valor" type="number" step="0.01" min="0.01" required></div>
@@ -553,13 +800,23 @@
       </div>
       <section class="card" style="margin-top:18px"><h2>Meus envios</h2>${tabelaLanc(lancs)}</section>`;
     document.getElementById('portal-mes').addEventListener('change', (e) => { viewPortal.mes = e.target.value; render(); });
+    let fornecedor = null;
+    cnpjRetornos['portal-cnpj'] = (info) => {
+      fornecedor = info;
+      const f = document.getElementById('form-lanc');
+      if (['fornecedor', 'simples'].includes(f.elements.categoria.value)) f.elements.categoria.value = tipoEmpresa(info) === 'regular' ? 'fornecedor' : 'simples';
+      if (!f.elements.descricao.value.trim()) f.elements.descricao.value = 'Compra — ' + (info.fantasia || info.razao);
+    };
     document.getElementById('form-lanc').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
       const arq = f.get('anexo');
+      const cnpjDigitado = soNumeros(document.getElementById('portal-cnpj-input').value);
+      const forn = fornecedor && fornecedor.cnpj === cnpjDigitado ? fornecedor : null;
       db.lancamentos.push({
         id: uid(), clienteId: id, categoria: f.get('categoria'), descricao: f.get('descricao').trim(), valor: num(f.get('valor')),
         data: f.get('data'), anexo: arq && arq.name ? arq.name : '', status: 'pendente', origem: 'cliente',
+        fornecedorCnpj: forn ? forn.cnpj : (cnpjDigitado || ''), fornecedorNome: forn ? (forn.fantasia || forn.razao) : '', fornecedorTipo: forn ? tipoEmpresa(forn) : '',
       });
       viewPortal.mes = String(f.get('data')).slice(0, 7);
       salvar();
@@ -705,6 +962,8 @@ ${lista(a.abertos)}
           ${campo('pisCofinsNaoCumulativo', 'PIS/COFINS não cumulativo — Real (%)')}
           ${campo('issPadrao', 'ISS padrão (%)')}
           ${campo('creditoSimples', 'Crédito sobre compras do Simples (%)')}
+          ${campo('irPF', 'Alíquota de IR da PF usada nos cenários (%)')}
+          ${campo('inssAutonomo', 'INSS da empresa sobre pagamento a autônomo (%)')}
         </div>
         <h2 style="margin-top:20px">Distribuição de lucros</h2>
         <div class="fields">
@@ -777,6 +1036,7 @@ ${lista(a.abertos)}
     },
     copiarSimulacao() { const t = textoSimulacao(); if (t) copiar(t); },
     restaurarParams() { db.params = Object.assign({}, PARAMS_PADRAO); salvar(); toast('Parâmetros restaurados.'); render(); },
+    consultarCnpj(prefixo) { consultarCnpj(prefixo); },
     copiarBackup() { copiar(JSON.stringify(db, null, 2)); },
     exportar() { baixar(`leaohub-backup-${hojeISO()}.json`, JSON.stringify(db, null, 2), 'application/json'); },
     resetDemo() { db = dadosDemo(); salvar(); toast('Dados de exemplo carregados.'); location.hash = '#/'; render(); },
@@ -791,6 +1051,12 @@ ${lista(a.abertos)}
     e.preventDefault();
     const executar = () => acoes[el.dataset.action](el.dataset.id, el, e);
     if (el.dataset.confirm) confirmar(el.dataset.confirm, executar); else executar();
+  });
+
+  // Enter no campo de CNPJ consulta, em vez de enviar o formulário.
+  document.addEventListener('keydown', (e) => {
+    const el = e.target.closest && e.target.closest('[data-cnpj]');
+    if (el && e.key === 'Enter') { e.preventDefault(); consultarCnpj(el.dataset.cnpj); }
   });
 
   // ---------------------------------------------------------------- rotas
@@ -811,6 +1077,7 @@ ${lista(a.abertos)}
           else viewCliente(b);
           break;
         case 'simulador': viewSimulador(b); break;
+        case 'cenarios': viewCenarios(); break;
         case 'portal': if (b) viewPortal(b); else viewPortalEscolha(); break;
         case 'atas':
           if (!b) viewAtas();
