@@ -68,9 +68,15 @@
     folha: 'Folha de pagamento (não gera crédito)',
     outros: 'Outras despesas (sem crédito)',
   };
+  // Revisão de nov/2026:
+  // - CBS 2027–2028: referência de 11,3% calculada pelo TCU em 28/10/2026 (cobrança de 11,2% + 0,1% de IBS de teste).
+  // - Regime completo (2033): estimativa do Comitê Gestor do IBS (Res. CGIBS 14/2026): IBS 18,70% + CBS 9,21% = 27,91%.
+  const VERSAO_PARAMS = 2;
   const PARAMS_PADRAO = {
+    versao: VERSAO_PARAMS,
     cbs: 11.3,
-    ibs: 18.79,
+    cbs2033: 9.21,
+    ibs: 18.7,
     pisCofinsCumulativo: 3.65,
     pisCofinsNaoCumulativo: 9.25,
     issPadrao: 3,
@@ -201,7 +207,7 @@
     const selo = tipo === 'mei'
       ? '<span class="badge warn">MEI (Simples): praticamente não gera crédito</span>'
       : tipo === 'simples'
-        ? `<span class="badge warn">Optante do Simples Nacional${info.desde ? ' desde ' + dataBR(info.desde) : ''}: crédito pequeno ou nenhum</span>`
+        ? `<span class="badge warn">Optante do Simples Nacional${info.desde ? ' desde ' + dataBR(info.desde) : ''}: crédito só do que ele paga no DAS (bem menor), a menos que pague CBS/IBS "por fora"</span>`
         : '<span class="badge ok">Não é do Simples: gera crédito cheio</span>';
     return `<div class="cnpj-res"><b>${esc(info.razao)}</b>${info.fantasia ? ` <span class="muted">(${esc(info.fantasia)})</span>` : ''}
       <div>${selo} ${info.situacao ? `<span class="badge">Situação: ${esc(info.situacao)}</span>` : ''}</div>
@@ -237,8 +243,15 @@
       clientes: Array.isArray(d.clientes) ? d.clientes : [],
       lancamentos: Array.isArray(d.lancamentos) ? d.lancamentos : [],
       atas: Array.isArray(d.atas) ? d.atas : [],
-      params: Object.assign({}, PARAMS_PADRAO, d.params || {}),
+      params: migrarParams(d.params),
     };
+  }
+  function migrarParams(antigos) {
+    const p = Object.assign({}, PARAMS_PADRAO, antigos || {});
+    if (!antigos || (antigos.versao || 1) < VERSAO_PARAMS) {
+      ['versao', 'cbs', 'cbs2033', 'ibs', 'creditoSimples', 'divAliqPL'].forEach((k) => { p[k] = PARAMS_PADRAO[k]; });
+    }
+    return p;
   }
   function carregar() {
     try {
@@ -338,12 +351,13 @@
     const totalHoje = pcHoje + issHoje;
 
     // Reforma
-    const aliqCbsEf = p.cbs * fator;
+    const cbsRef = comIbs ? p.cbs2033 : p.cbs; // 2027–2028: CBS do TCU; 2033: estimativa do regime completo
+    const aliqCbsEf = cbsRef * fator;
     const aliqIbsEf = comIbs ? p.ibs * fator : 0;
     const debCbs = inp.receita * aliqCbsEf / 100;
     const debIbs = inp.receita * aliqIbsEf / 100;
     const debito = debCbs + debIbs;
-    const aliqCredito = p.cbs + (comIbs ? p.ibs : 0);
+    const aliqCredito = cbsRef + (comIbs ? p.ibs : 0);
     const credFornec = inp.despReg * aliqCredito / 100;
     const credSimples = inp.despSimples * p.creditoSimples / 100;
     const credito = credFornec + credSimples + inp.creditoAnterior;
@@ -352,7 +366,7 @@
     const creditoProx = Math.max(0, -saldo);
 
     return {
-      setor, fator, comIbs, aliqPC, pcBruto, pcCredito, pcHoje, issHoje, totalHoje,
+      setor, fator, comIbs, cbsRef, aliqPC, pcBruto, pcCredito, pcHoje, issHoje, totalHoje,
       aliqCbsEf, aliqIbsEf, debCbs, debIbs, debito, aliqCredito, credFornec, credSimples,
       credito, saldo, aPagar, creditoProx,
       diferenca: aPagar - totalHoje,
@@ -547,8 +561,8 @@
             <div><label>Cliente</label><select id="sim-cliente">${opcoesClientes(clienteId, 'Simulação livre')}</select>
               <div class="muted small" style="margin-top:4px">${esc(origem)}</div></div>
             <div><label>O que comparar</label><select name="escopo">
-              <option value="cbs" ${ini.escopo === 'cbs' ? 'selected' : ''}>Só PIS/COFINS → CBS</option>
-              <option value="cbs_ibs">PIS/COFINS + ISS → CBS + IBS</option></select></div>
+              <option value="cbs" ${ini.escopo === 'cbs' ? 'selected' : ''}>2027–2028: PIS/COFINS → CBS (${pct(p.cbs)})</option>
+              <option value="cbs_ibs">2033 em diante: PIS/COFINS + ISS → CBS + IBS (${pct(p.cbs2033 + p.ibs)})</option></select></div>
             <div><label>Regime atual</label><select name="regimeAtual">
               <option value="presumido" ${ini.regimeAtual === 'presumido' ? 'selected' : ''}>Lucro Presumido (PIS/COFINS ${pct(p.pisCofinsCumulativo)})</option>
               <option value="real" ${ini.regimeAtual === 'real' ? 'selected' : ''}>Lucro Real (PIS/COFINS ${pct(p.pisCofinsNaoCumulativo)} com créditos)</option></select></div>
@@ -602,27 +616,28 @@
         ${r.comIbs ? `<tr><td>ISS: ${brl(inp.receita)} × ${pct(inp.iss)}</td><td class="num">${brl(r.issHoje)}</td></tr>` : ''}
         <tr class="total"><td>Total hoje</td><td class="num">${brl(r.totalHoje)}</td></tr>
         <tr><td colspan="2" style="padding-top:14px"><b>Com a reforma</b> <span class="muted small">(redução do setor: ${r.setor.reducao}%)</span></td></tr>
-        <tr><td>Débito CBS: ${brl(inp.receita)} × ${pct(r.aliqCbsEf)} <span class="muted small">(${pct(p.cbs)} × ${pct(r.fator * 100)})</span></td><td class="num">${brl(r.debCbs)}</td></tr>
+        <tr><td>Débito CBS: ${brl(inp.receita)} × ${pct(r.aliqCbsEf)} <span class="muted small">(${pct(r.cbsRef)} × ${pct(r.fator * 100)})</span></td><td class="num">${brl(r.debCbs)}</td></tr>
         ${r.comIbs ? `<tr><td>Débito IBS: ${brl(inp.receita)} × ${pct(r.aliqIbsEf)}</td><td class="num">${brl(r.debIbs)}</td></tr>` : ''}
         <tr><td>(−) Crédito sobre compras fora do Simples: ${brl(inp.despReg)} × ${pct(r.aliqCredito)}</td><td class="num">−${brl(r.credFornec)}</td></tr>
-        <tr><td>(−) Crédito sobre compras do Simples: ${brl(inp.despSimples)} × ${pct(p.creditoSimples)}</td><td class="num">−${brl(r.credSimples)}</td></tr>
+        <tr><td>(−) Crédito sobre compras do Simples: ${brl(inp.despSimples)} × ${pct(p.creditoSimples)} <span class="muted small">(só o CBS/IBS pago no DAS, informado na nota; ajuste em Parâmetros)</span></td><td class="num">−${brl(r.credSimples)}</td></tr>
         ${inp.creditoAnterior ? `<tr><td>(−) Crédito acumulado do mês anterior</td><td class="num">−${brl(inp.creditoAnterior)}</td></tr>` : ''}
         <tr><td>Folha de pagamento (${brl(inp.folha)}): não gera crédito</td><td class="num">${brl(0)}</td></tr>
         <tr class="total"><td>A pagar com a reforma</td><td class="num">${brl(r.aPagar)}</td></tr>
       </tbody></table>
 
       <h3>Split payment e capital de giro</h3>
-      <p>No split payment, o imposto é retido no momento do recebimento. Na prática, cerca de <b>${brl(r.splitRetido)}</b> (${pct(r.splitPctReceita)} da receita) deixam de cair na conta. Os créditos são compensados depois.</p>
+      <p>Quando o split payment estiver valendo, o imposto é retido no momento do recebimento: cerca de <b>${brl(r.splitRetido)}</b> (${pct(r.splitPctReceita)} da receita) deixariam de cair na conta, e os créditos são compensados depois.</p>
+      <p class="muted small">Cronograma: começa em 2027 de forma <b>opcional</b> e só entre empresas (Pix, boleto, transferência). A obrigatoriedade ainda não tem data (a Receita trabalha com 2028). Vendas para pessoa física e pagamentos com cartão ficam fora da primeira fase.</p>
 
       ${dividendos > 0 ? `<h3>Distribuição de lucros</h3>
       <table class="calc-lines"><tbody>
         <tr><td>Regra atual: isento até ${brl(p.divLimite)}/mês; acima disso, ${pct(p.divAliqAtual)} sobre o ${p.divBase === 'excedente' ? 'excedente' : 'total'}</td><td class="num">${brl(div.atual)}</td></tr>
-        <tr><td>Cenário do projeto de lei: ${pct(p.divAliqPL)} sobre qualquer valor, retido na fonte</td><td class="num">${brl(div.pl)}</td></tr>
+        <tr><td>Cenário hipotético: ${pct(p.divAliqPL)} sobre qualquer valor <span class="muted small">(não há lei aprovada)</span></td><td class="num">${brl(div.pl)}</td></tr>
       </tbody></table>
-      <p class="muted small">O valor retido pode ser ajustado na declaração anual.</p>` : ''}
+      <p class="muted small">Regra atual: Lei 15.270/2025, em vigor desde jan/2026. O valor retido é antecipação: no ajuste anual entra o imposto mínimo de quem tem renda acima de R$ 600 mil/ano (IRPFM), e pode haver restituição.</p>` : ''}
 
       ${r.credFornec >= r.debito && inp.despReg > 0 ? '<div class="note">Os créditos sobre compras estão zerando ou superando o débito. Isso acontece porque a redução do setor vale para a venda (saída), mas o crédito entra com a alíquota cheia. Essa regra ainda pode mudar, então não conte com esse crédito no planejamento.</div>' : ''}
-      <div class="note info">Estimativa para o regime pleno, com alíquotas de referência editáveis em <a href="#/config">Parâmetros</a>. As alíquotas finais ainda não estão definidas e não há fase de transição na conta. Não substitui a análise do contador.</div>`;
+      <div class="note info">Alíquotas editáveis em <a href="#/config">Parâmetros</a>: CBS de 2027 = 11,3% (cálculo do TCU, falta o Senado fixar); regime completo de 2033 = estimativa do Comitê Gestor do IBS. A conta não inclui os anos intermediários da transição (2029–2032). Não substitui a análise do contador.</div>`;
   }
 
   function textoSimulacao() {
@@ -638,7 +653,7 @@
       `Crédito para o próximo mês: ${brl(r.creditoProx)}`,
       `Split payment: cerca de ${brl(r.splitRetido)} retidos no recebimento (${pct(r.splitPctReceita)} da receita).`,
     ];
-    if (dividendos > 0) out.push(`Dividendos (${brl(dividendos)}): regra atual ${brl(div.atual)} | cenário PL ${brl(div.pl)}`);
+    if (dividendos > 0) out.push(`Dividendos (${brl(dividendos)}): regra atual (Lei 15.270/2025) ${brl(div.atual)} | cenário hipotético ${brl(div.pl)}`);
     out.push('Estimativa com alíquotas de referência ainda não definitivas.');
     return out.join('\n');
   }
@@ -650,14 +665,14 @@
    * (alíquota cheia para fornecedor fora do Simples, reduzida se o setor dele tiver redução).
    */
   function calcularCenarios(v, p) {
-    const aliqCheia = p.cbs + (v.comIbs ? p.ibs : 0);
+    const aliqCheia = v.comIbs ? p.cbs2033 + p.ibs : p.cbs;
     const aliqSetor = (setor) => aliqCheia * (1 - (SETORES[setor] || SETORES.geral).reducao / 100);
     const pc = (valor, aliq) => valor * aliq / 100;
 
     const compra = [
       { id: 'pf', nome: 'Pessoa física (autônomo, sem empresa)', credito: 0 },
       { id: 'mei', nome: 'MEI', credito: 0 },
-      { id: 'simples', nome: 'Empresa do Simples Nacional', credito: pc(v.c1Valor, p.creditoSimples) },
+      { id: 'simples', nome: `Empresa do Simples Nacional (crédito = CBS/IBS pago no DAS; usando ${pct(p.creditoSimples)})`, credito: pc(v.c1Valor, p.creditoSimples) },
       { id: 'simplesFora', nome: 'Empresa do Simples que paga CBS/IBS "por fora"', credito: pc(v.c1Valor, aliqCheia) },
       { id: 'regular', nome: 'Empresa fora do Simples (Presumido ou Real)', credito: pc(v.c1Valor, aliqCheia) },
     ].map((o) => Object.assign(o, { custo: v.c1Valor - o.credito }));
@@ -695,8 +710,8 @@
           <div class="fields">
             <div><label>O que a sua empresa vende</label><select name="setor" data-setor>${opcoes(SETORES, 'saude', (s) => `${s.nome} (redução ${s.reducao}%)`)}</select>${dicaSetor('saude')}</div>
             <div><label>Quais tributos considerar</label><select name="escopo">
-              <option value="cbs">Só CBS (substitui PIS/COFINS, vale a partir de 2027)</option>
-              <option value="cbs_ibs">CBS + IBS (regime completo, a partir de 2033)</option></select></div>
+              <option value="cbs">2027–2028: só CBS (${pct(p.cbs)}), substitui PIS/COFINS</option>
+              <option value="cbs_ibs">2033 em diante: CBS + IBS (${pct(p.cbs2033 + p.ibs)}), regime completo</option></select></div>
           </div>
         </section>
         <div class="grid-2 cenarios">
@@ -756,7 +771,7 @@
         <thead><tr><th>Fornecedor</th><th class="num">Crédito</th><th class="num">Custo real</th></tr></thead>
         <tbody>${r.compra.map((o) => linhaTabela([`<td>${esc(o.nome)}</td>`, `<td class="num">${brl(o.credito)}</td>`, `<td class="num">${o.custo === melhorCompra ? '<b>' + brl(o.custo) + '</b>' : brl(o.custo)}</td>`], destaque === o.id)).join('')}</tbody></table></div>
         <p class="small">Comprando de empresa fora do Simples, você recupera <b>${brl(r.compra[4].credito)}</b> (${pct(r.aliqCheia)}). Se o preço do fornecedor do Simples for até ${brl(r.compra[4].custo)}, ele ainda sai mais barato.</p>
-        <p class="muted small">Se o fornecedor tiver redução no setor dele, o crédito é menor. Compras no CPF não geram crédito para a empresa.</p>`;
+        <p class="muted small">Se o fornecedor tiver redução no setor dele, o crédito é menor. Compras no CPF não geram crédito para a empresa. Pela LC 214/2025 (art. 47), o crédito só vale quando o fornecedor efetivamente paga o imposto: fornecedor irregular vira risco.</p>`;
 
       const ganhaPJ = r.despesaPJ > r.despesaPF;
       document.getElementById('r2').innerHTML = `<table class="calc-lines"><tbody>
@@ -779,8 +794,8 @@
 
       document.getElementById('r6').innerHTML = `<table class="calc-lines"><tbody>
         <tr><td>Regra atual: isento até ${brl(p.divLimite)}/mês; acima disso, ${pct(p.divAliqAtual)} sobre o ${p.divBase === 'excedente' ? 'excedente' : 'total'}</td><td class="num">${brl(r.div.atual)}</td></tr>
-        <tr><td>Cenário do projeto de lei: ${pct(p.divAliqPL)} retido sobre qualquer valor</td><td class="num">${brl(r.div.pl)}</td></tr></tbody></table>
-        <p class="muted small">O imposto retido na fonte pode ser ajustado na declaração anual.</p>`;
+        <tr><td>Cenário hipotético: ${pct(p.divAliqPL)} sobre qualquer valor <span class="muted small">(não há lei aprovada)</span></td><td class="num">${brl(r.div.pl)}</td></tr></tbody></table>
+        <p class="muted small">Regra atual: Lei 15.270/2025, em vigor desde jan/2026. O valor retido é antecipação: no ajuste anual entra o imposto mínimo de quem tem renda acima de R$ 600 mil/ano (IRPFM), e pode haver restituição.</p>`;
     };
     form.addEventListener('input', atualizar);
     form.addEventListener('change', atualizar);
@@ -877,7 +892,7 @@
 
   function viewServicos() {
     const p = db.params;
-    const cheia = p.cbs + p.ibs;
+    const cheia = p.cbs2033 + p.ibs;
     const efetiva = (f) => (FAIXAS[f].reducao == null ? 'cálculo próprio' : pct(cheia * (1 - FAIXAS[f].reducao / 100)));
     $app.innerHTML = `
       <header class="page-head">
@@ -886,7 +901,7 @@
       </header>
       <section class="card">
         <h2>Como ler</h2>
-        <p>O imposto novo (CBS + IBS) tem uma alíquota cheia, hoje estimada em <b>${pct(cheia)}</b>. Alguns serviços pagam só uma parte dela:</p>
+        <p>Quando a reforma estiver completa (2033), o imposto novo (CBS + IBS) terá uma alíquota cheia hoje estimada em <b>${pct(cheia)}</b> (estimativa do Comitê Gestor do IBS). Em 2027 e 2028 só a CBS é cobrada de verdade: <b>${pct(p.cbs)}</b>, com as mesmas reduções. Alguns serviços pagam só uma parte da alíquota:</p>
         <div class="faixas">
           ${['cheia', '30', '40', '60', 'proprio'].map((f) => `<div class="faixa"><span class="badge ${FAIXAS[f].classe}">${FAIXAS[f].nome}</span>
             <b>${efetiva(f)}</b><span class="muted small">${f === 'cheia' ? 'paga tudo' : f === 'proprio' ? 'regras específicas do setor' : `paga ${100 - FAIXAS[f].reducao}% da alíquota`}</span></div>`).join('')}
@@ -1133,12 +1148,13 @@ ${lista(a.abertos)}
       <form class="card" id="form-params">
         <h2>Alíquotas de referência</h2>
         <div class="fields">
-          ${campo('cbs', 'CBS — alíquota de referência (%)')}
-          ${campo('ibs', 'IBS — alíquota de referência (%)')}
+          ${campo('cbs', 'CBS 2027–2028: referência (%) <span class="hint">TCU, 28/10/2026; Senado fixa até 15/12</span>')}
+          ${campo('cbs2033', 'CBS no regime completo, 2033 (%) <span class="hint">estimativa CGIBS</span>')}
+          ${campo('ibs', 'IBS no regime completo, 2033 (%) <span class="hint">estimativa CGIBS (Res. 14/2026)</span>')}
           ${campo('pisCofinsCumulativo', 'PIS/COFINS cumulativo — Presumido (%)')}
           ${campo('pisCofinsNaoCumulativo', 'PIS/COFINS não cumulativo — Real (%)')}
           ${campo('issPadrao', 'ISS padrão (%)')}
-          ${campo('creditoSimples', 'Crédito sobre compras do Simples (%)')}
+          ${campo('creditoSimples', 'Crédito sobre compras do Simples (%) <span class="hint">CBS/IBS que o fornecedor paga no DAS; vem na nota. 0 = conservador</span>')}
           ${campo('irPF', 'Alíquota de IR da PF usada nos cenários (%)')}
           ${campo('inssAutonomo', 'INSS da empresa sobre pagamento a autônomo (%)')}
         </div>
@@ -1149,8 +1165,9 @@ ${lista(a.abertos)}
           <div><label>Base da alíquota acima do limite</label><select name="divBase">
             <option value="total" ${p.divBase === 'total' ? 'selected' : ''}>Sobre o valor total</option>
             <option value="excedente" ${p.divBase === 'excedente' ? 'selected' : ''}>Só sobre o excedente</option></select></div>
-          ${campo('divAliqPL', 'Cenário do projeto de lei (%)')}
+          ${campo('divAliqPL', 'Cenário hipotético de comparação (%) <span class="hint">não há lei aprovada</span>')}
         </div>
+        <div class="note">As alíquotas ainda não são definitivas. A lei prevê um teto de 26,5% para CBS + IBS, mas ele não é automático: se a estimativa passar disso, o governo precisa propor medidas de redução ao Congresso.</div>
         <div class="note info">Reduções por setor usadas no simulador: ${Object.values(SETORES).map((s) => `${esc(s.nome)} ${s.reducao}%`).join(' · ')}.</div>
         <div class="form-foot"><button class="btn" type="submit">Salvar parâmetros</button><button class="btn secondary" type="button" data-action="restaurarParams">Restaurar padrão</button></div>
       </form>
@@ -1169,6 +1186,7 @@ ${lista(a.abertos)}
       e.preventDefault();
       const f = new FormData(e.target);
       Object.keys(PARAMS_PADRAO).forEach((k) => { if (f.has(k)) db.params[k] = k === 'divBase' ? f.get(k) : num(f.get(k)); });
+      db.params.versao = VERSAO_PARAMS;
       salvar();
       toast('Parâmetros salvos.');
     });
