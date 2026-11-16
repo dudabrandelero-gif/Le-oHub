@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeãoHub — Sistema para escritórios de contabilidade</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">LeãoHub<span>protótipo</span></div>
+    <nav id="nav">
+      <a href="#/" data-route="">Painel</a>
+      <a href="#/clientes" data-route="clientes">Clientes</a>
+      <a href="#/simulador" data-route="simulador">Simulador da reforma</a>
+      <a href="#/portal" data-route="portal">Portal do cliente</a>
+      <a href="#/atas" data-route="atas">Atas e reuniões</a>
+      <a href="#/config" data-route="config">Parâmetros e dados</a>
+    </nav>
+    <p class="sidebar-note">Protótipo: os dados ficam salvos só neste navegador.</p>
+  </aside>
+  <main id="app"></main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
