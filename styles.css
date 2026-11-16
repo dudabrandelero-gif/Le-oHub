@@ -128,3 +128,15 @@ tr.marcada td { background: var(--accent-soft); }
 .faixa { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .faixa b { font-size: 1.2rem; }
 @media (max-width: 900px) { .faixas { grid-template-columns: repeat(2, 1fr); } }
+
+.nav-grupo { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .08em; color: #8ea0b4; padding: 14px 10px 4px; }
+.nav-grupo:first-child { padding-top: 0; }
+.quadro { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; align-items: start; margin-bottom: 18px; }
+.coluna { background: #eceef2; border-radius: var(--radius); padding: 12px; }
+.coluna-head { display: flex; justify-content: space-between; align-items: center; }
+.coluna > p { margin: 6px 0 10px; }
+.pend { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.pend h3 { margin: 0 0 6px; font-size: 0.95rem; }
+.pend p { margin: 4px 0; }
+@media (max-width: 1100px) { .quadro { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px) { .quadro { grid-template-columns: 1fr; } #nav .nav-grupo { width: 100%; padding: 6px 4px 0; } }

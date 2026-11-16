@@ -6,17 +6,31 @@ Sistema para escritórios de contabilidade, focado na transição da **reforma t
 
 ## Módulos
 
-| Módulo | O que faz |
+O menu é dividido em três grupos.
+
+**Reforma tributária**
+
+| Aba | O que faz |
 |---|---|
-| **Painel** | Visão geral: clientes, envios pendentes de conferência e tarefas abertas. |
-| **Clientes** | Cadastro das empresas atendidas: regime (Simples, Presumido, Real, PF), setor e faturamento. |
-| **Simulador da reforma** | Compara PIS/COFINS (+ ISS) de hoje com CBS (+ IBS): redução por setor, créditos sobre compras, folha sem crédito, crédito acumulado, split payment e distribuição de lucros. Copia um resumo pronto para mandar ao cliente. |
-| **Cenários PF x PJ** | Situações práticas lado a lado: de quem comprar (PF, MEI, Simples, empresa fora do Simples), lançar despesa no CPF ou no CNPJ, vender para PF ou PJ, pagar parceiro como PF ou PJ, funcionário CLT x PJ e retirada de lucro. |
-| **Tipos de serviço** | Guia pesquisável com dezenas de serviços (saúde, educação, profissões regulamentadas, tecnologia, marketing, cultura, turismo, imóveis etc.) e o enquadramento de cada um na reforma: alíquota cheia, redução de 30%, 40%, 60% ou regime próprio, com a base legal e um atalho para simular. |
-| **Consulta de CNPJ** | Informa se um fornecedor é do Simples Nacional ou MEI, pelo CNPJ, usando dados públicos da Receita (BrasilAPI, com CNPJá como reserva). Aparece nos Cenários, no Portal do cliente e no cadastro de clientes. A busca pelo nome não existe em APIs gratuitas. |
-| **Portal do cliente** | Tela em que o cliente envia notas e despesas e vê uma estimativa mensal de CBS e créditos. O escritório confere cada envio. |
-| **Atas e reuniões** | Registro das reuniões com clientes: resumo, orientações, tarefas com responsável e prazo, pontos em aberto. Exporta em Markdown. |
-| **Parâmetros** | Alíquotas de referência editáveis, além de backup (exportar e importar JSON). |
+| **Simulador da reforma** (página inicial) | Compara PIS/COFINS (+ ISS) de hoje com CBS (2027–2028) ou CBS + IBS (2033): redução por atividade, créditos, folha sem crédito, crédito acumulado, split payment e dividendos. Copia um resumo pronto para mandar ao cliente. |
+| **Cenários PF x PJ** | Situações práticas lado a lado: de quem comprar (PF, MEI, Simples, empresa fora do Simples), lançar despesa no CPF ou no CNPJ, vender para PF ou PJ, pagar parceiro como PF ou PJ, funcionário CLT x PJ e retirada de lucro. Inclui consulta de CNPJ (Simples/MEI). |
+| **Tipos de serviço** | Guia pesquisável com dezenas de serviços e o enquadramento de cada um: alíquota cheia, redução de 30%, 40%, 60% ou regime próprio, com base legal e atalho para simular. |
+| **O que ainda não está definido** | Quadro com as regras que ainda podem mudar (com prazo, sem data, interpretação/condições) e as limitações do sistema, dizendo como o LeãoHub trata cada uma e onde atualizar. |
+
+**Escritório**
+
+| Aba | O que faz |
+|---|---|
+| **Clientes** | Cadastro das empresas atendidas (regime, tipo de atividade, faturamento), com busca de dados pelo CNPJ e estimativa da reforma com os lançamentos do mês. |
+| **Portal do cliente** | O cliente envia notas e despesas (com consulta do CNPJ do fornecedor) e vê uma estimativa mensal de CBS e créditos. O escritório confere cada envio. |
+
+**Configuração**
+
+| Aba | O que faz |
+|---|---|
+| **Parâmetros e dados** | Alíquotas de referência editáveis, além de backup (exportar e importar JSON). |
+
+A consulta de CNPJ usa dados públicos da Receita (BrasilAPI, com CNPJá como reserva). A busca pelo nome da empresa não existe em APIs gratuitas.
 
 ## Como rodar
 

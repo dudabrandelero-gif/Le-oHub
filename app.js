@@ -1,6 +1,7 @@
 /*
  * LeãoHub — protótipo de sistema para escritórios de contabilidade.
- * Módulos: clientes, simulador da reforma tributária (CBS/IBS), portal do cliente e atas.
+ * Módulos: simulador da reforma tributária (CBS/IBS), cenários PF x PJ, tipos de serviço,
+ * quadro do que ainda não está definido, clientes e portal do cliente.
  * Sem servidor: os dados ficam no localStorage do navegador.
  */
 'use strict';
@@ -242,7 +243,6 @@
     return {
       clientes: Array.isArray(d.clientes) ? d.clientes : [],
       lancamentos: Array.isArray(d.lancamentos) ? d.lancamentos : [],
-      atas: Array.isArray(d.atas) ? d.atas : [],
       params: migrarParams(d.params),
     };
   }
@@ -283,30 +283,6 @@
         { id: uid(), clienteId: c2, categoria: 'receita', descricao: 'Vendas do mês', valor: 180000, data: mes + '03', anexo: '', status: 'conferido', origem: 'escritorio' },
         { id: uid(), clienteId: c2, categoria: 'fornecedor', descricao: 'Compra de mercadorias', valor: 110000, data: mes + '06', anexo: 'nf-distribuidora.xml', status: 'pendente', origem: 'cliente' },
       ],
-      atas: [
-        {
-          id: 'demo-ata', clienteId: c1, data: hojeISO(), participantes: 'Dra. Ana (Clínica Sorriso); Marcos (contador)',
-          tema: 'Impactos da reforma tributária na clínica',
-          resumo: [
-            'PIS/COFINS de hoje (3,65%) vira CBS: alíquota de referência com redução para saúde, cerca de 4,52% efetivos, com direito a créditos.',
-            'Passa a valer mais lançar as despesas na PJ para gerar crédito, sem inflar despesas só para isso.',
-            'O split payment retém o imposto antes do dinheiro cair, reduzindo o capital de giro.',
-          ],
-          orientacoes: [
-            'Folha de pagamento não gera crédito.',
-            'Compras de empresas do Simples não geram crédito (ou geram pouco).',
-            'Não vale a pena passar funcionário de PF para PJ.',
-            'Dentistas PJ devem emitir NF para a clínica, que fica com o crédito.',
-          ],
-          tarefas: [
-            { texto: 'Simular a troca de 3,65% por 4,52% com os números reais', responsavel: 'Marcos (contador)', prazo: '', status: 'aberta' },
-            { texto: 'Listar despesas hoje na PF que podem ir para a PJ', responsavel: 'Dra. Ana', prazo: '', status: 'aberta' },
-            { texto: 'Projetar o caixa considerando o split payment', responsavel: 'Marcos (contador)', prazo: '', status: 'aberta' },
-          ],
-          abertos: ['Alíquotas finais ainda não definidas.', 'Regra de crédito sobre despesas ainda pode mudar.'],
-          proxima: '', pauta: 'Resultado da simulação; despesas que migram para a PJ; impacto do split payment no caixa.',
-        },
-      ],
     });
   }
 
@@ -324,12 +300,6 @@
     const set = new Set(db.lancamentos.filter((l) => l.clienteId === clienteId && l.data).map((l) => l.data.slice(0, 7)));
     return Array.from(set).sort().reverse();
   }
-  function tarefasAbertas() {
-    const out = [];
-    db.atas.forEach((a) => (a.tarefas || []).forEach((t, i) => { if (t.status !== 'feita') out.push(Object.assign({ ataId: a.id, idx: i, clienteId: a.clienteId }, t)); }));
-    return out;
-  }
-
   // ---------------------------------------------------------------- cálculo da reforma
   /*
    * Simulação mensal simplificada (regime pleno, sem fase de transição).
@@ -383,7 +353,6 @@
   }
 
   // ---------------------------------------------------------------- componentes
-  const stat = (rotulo, valor) => `<div class="stat"><b>${esc(valor)}</b><span>${esc(rotulo)}</span></div>`;
   const badgeStatus = (s) => s === 'conferido' ? '<span class="badge ok">Conferido</span>' : '<span class="badge warn">Pendente</span>';
   const opcoes = (obj, sel, rotulo) => Object.keys(obj).map((k) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(rotulo ? rotulo(obj[k]) : obj[k])}</option>`).join('');
   const opcoesClientes = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : '') + db.clientes.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
@@ -408,37 +377,7 @@
       <tbody>${linhasHtml}</tbody></table></div>`;
   }
 
-  function tabelaTarefas(lista) {
-    return `<div class="table-wrap"><table>
-      <thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th>Cliente</th><th></th></tr></thead>
-      <tbody>${lista.map((t) => `<tr>
-        <td><a href="#/atas/${t.ataId}">${esc(t.texto)}</a></td>
-        <td>${t.responsavel ? esc(t.responsavel) : '<span class="badge warn">A confirmar</span>'}</td>
-        <td>${t.prazo ? dataBR(t.prazo) : '<span class="muted">A definir</span>'}</td>
-        <td>${esc(nomeCliente(t.clienteId))}</td>
-        <td class="num"><button class="btn small secondary" data-action="toggleTarefa" data-id="${t.ataId}:${t.idx}">Concluir</button></td>
-      </tr>`).join('')}</tbody></table></div>`;
-  }
-
   // ---------------------------------------------------------------- telas
-  function viewPainel() {
-    const pend = db.lancamentos.filter((l) => l.status !== 'conferido');
-    const tarefas = tarefasAbertas();
-    $app.innerHTML = `
-      <header class="page-head">
-        <div><h1>Painel do escritório</h1><p class="muted">Visão geral de clientes, envios e tarefas.</p></div>
-        <div class="actions"><a class="btn secondary" href="#/atas/nova">+ Nova ata</a><a class="btn" href="#/clientes/novo">+ Novo cliente</a></div>
-      </header>
-      <section class="stats">
-        ${stat('Clientes', db.clientes.length)}
-        ${stat('Envios pendentes', pend.length)}
-        ${stat('Tarefas abertas', tarefas.length)}
-        ${stat('Atas registradas', db.atas.length)}
-      </section>
-      <section class="card"><h2>Tarefas abertas</h2>${tarefas.length ? tabelaTarefas(tarefas) : '<p class="muted">Nenhuma tarefa aberta.</p>'}</section>
-      <section class="card"><h2>Envios dos clientes aguardando conferência</h2>${tabelaLanc(pend, { mostrarCliente: true, escritorio: true })}</section>`;
-  }
-
   function viewClientes() {
     $app.innerHTML = `
       <header class="page-head">
@@ -502,14 +441,16 @@
     const c = cliente(id);
     if (!c) return naoEncontrado();
     const lancs = db.lancamentos.filter((l) => l.clienteId === id);
-    const atas = db.atas.filter((a) => a.clienteId === id);
+    const meses = mesesDoCliente(id);
+    const mesRef = meses[0];
+    const res = mesRef ? resumoMes(id, mesRef) : null;
+    const est = res ? calcularReforma({ escopo: 'cbs', regimeAtual: c.regime === 'real' ? 'real' : 'presumido', setor: c.setor, receita: res.receita, despReg: res.fornecedor, despSimples: res.simples, folha: res.folha, iss: 0, creditoAnterior: 0 }, db.params) : null;
     $app.innerHTML = `
       <header class="page-head">
         <div><h1>${esc(c.nome)}</h1><p class="muted">${esc(REGIMES[c.regime] || '')} · ${esc((SETORES[c.setor] || {}).nome || '')} · ${esc(c.cnpj)}</p></div>
         <div class="actions">
           <a class="btn" href="#/simulador/${c.id}">Simular reforma</a>
           <a class="btn secondary" href="#/portal/${c.id}">Abrir portal do cliente</a>
-          <a class="btn secondary" href="#/atas/nova/${c.id}">+ Nova ata</a>
           <a class="btn secondary" href="#/clientes/${c.id}/editar">Editar</a>
         </div>
       </header>
@@ -518,10 +459,16 @@
           <p><b>Contato:</b> ${esc(c.contato) || '—'}<br><b>E-mail:</b> ${esc(c.email) || '—'}<br><b>Faturamento médio:</b> ${brl(c.faturamento)}</p>
           ${c.obs ? `<p class="muted">${esc(c.obs)}</p>` : ''}
           ${c.regime === 'simples' ? '<div class="note">Empresa do Simples: avaliar se continua no regime. Clientes PJ dela não aproveitam crédito cheio de CBS/IBS.</div>' : ''}
-          <p style="margin-top:16px"><button class="link-btn danger" data-action="excluirCliente" data-confirm="Excluir o cliente, os lançamentos e as atas dele?" data-id="${c.id}">Excluir cliente</button></p>
+          <p style="margin-top:16px"><button class="link-btn danger" data-action="excluirCliente" data-confirm="Excluir o cliente e os lançamentos dele?" data-id="${c.id}">Excluir cliente</button></p>
         </section>
-        <section class="card"><h2>Atas e reuniões</h2>
-          ${atas.length ? `<ul>${atas.map((a) => `<li><a href="#/atas/${a.id}">${dataBR(a.data)} — ${esc(a.tema)}</a></li>`).join('')}</ul>` : '<p class="muted">Nenhuma ata registrada.</p>'}
+        <section class="card"><h2>Reforma: estimativa do mês${mesRef ? ' ' + mesBR(mesRef) : ''}</h2>
+          ${est ? `<table class="calc-lines"><tbody>
+            <tr><td>Receitas lançadas</td><td class="num">${brl(res.receita)}</td></tr>
+            <tr><td>PIS/COFINS hoje</td><td class="num">${brl(est.totalHoje)}</td></tr>
+            <tr><td>CBS em 2027 (após créditos)</td><td class="num">${brl(est.aPagar)}</td></tr>
+            <tr class="total"><td>Diferença por mês</td><td class="num">${est.diferenca > 0 ? '+' : ''}${brl(est.diferenca)}</td></tr></tbody></table>
+            <p class="muted small">Estimativa com os lançamentos do mês. Veja os detalhes no simulador.</p>`
+          : '<p class="muted">Sem lançamentos ainda. Use o simulador com o faturamento médio.</p>'}
         </section>
       </div>
       <section class="card" style="margin-top:18px"><h2>Lançamentos enviados</h2>${tabelaLanc(lancs, { escritorio: true })}</section>`;
@@ -1017,126 +964,57 @@
     });
   }
 
-  // --- atas
-  function viewAtas() {
-    const atas = db.atas.slice().sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  // --- quadro: o que ainda não está definido (revisado em 16/11/2026)
+  // coluna: 'data' (tem prazo), 'semdata' (sem data), 'divergencia' (interpretação/condição), 'limite' (limitação do LeãoHub)
+  const PENDENCIAS = [
+    { coluna: 'data', titulo: 'Alíquota da CBS de 2027', situacao: 'O TCU calculou 11,3% em 28/10/2026.', falta: 'O Senado fixar o percentual. Se não decidir no prazo, vale o cálculo do TCU.', quando: 'Até 15/12/2026', sistema: 'Usa 11,3% (em 2027–2028 a cobrança é 11,2% de CBS + 0,1% de IBS de teste).', param: true, fonte: { nome: 'Alianzo', url: 'https://alianzo.com.br/blog/aliquota-da-cbs-de-113-em-2027-o-que-significa-para-a-sua-empresa/' } },
+    { coluna: 'data', titulo: 'Simples Nacional: pagar CBS/IBS dentro ou fora do DAS', situacao: 'A opção é semestral. A janela do 1º semestre de 2027 foi em setembro/2026.', falta: 'Cancelamento da opção até 30/11/2026. Próxima janela: 01 a 31/03/2027.', quando: '30/11/2026 e março/2027', sistema: 'Os cenários mostram o fornecedor do Simples "por fora" com crédito cheio.', param: false, fonte: { nome: 'Taxcel', url: 'https://taxcel.com.br/simples-nacional-regime-regular-ibs-cbs-opcao-semestral' } },
+    { coluna: 'semdata', titulo: 'Alíquota definitiva do IBS', situacao: 'O Comitê Gestor usa 18,70% só como estimativa para cálculos internos.', falta: 'Fixação oficial das alíquotas estaduais e municipais. O IBS é a soma das alíquotas do estado e do município de destino, então pode variar por cidade.', quando: 'Prevista para 2029', sistema: 'Usa 18,70% no regime completo (2033).', param: true, fonte: { nome: 'Contadores.cnt.br', url: 'https://contadores.cnt.br/projetos/46/noticias/tecnicas/2026/08/05/reforma-tributaria-aliquota-padrao-e-estimativa-18-7-do-ibs.html' } },
+    { coluna: 'semdata', titulo: 'Alíquota cheia de 2033 e o teto de 26,5%', situacao: 'A estimativa oficial é 27,91% (IBS 18,70% + CBS 9,21%), acima do teto de 26,5%.', falta: 'O teto não é automático: se passar dele, o governo precisa propor medidas de redução ao Congresso.', quando: 'Avaliação com dados de 2030', sistema: 'Usa 27,91% no regime completo. Os anos de 2029 a 2032 não são calculados.', param: true, fonte: { nome: 'APET', url: 'https://apet.org.br/artigos/iva-a-2791-a-trava-dos-265-protege-a-arrecadacao-nao-voce/' } },
+    { coluna: 'semdata', titulo: 'Split payment obrigatório', situacao: 'Começa em 2027 de forma opcional, só entre empresas (Pix, boleto, transferência).', falta: 'Data de obrigatoriedade. Vendas para pessoa física e cartão ficam fora da 1ª fase.', quando: 'Sem data (Receita trabalha com 2028)', sistema: 'O simulador mostra quanto ficaria retido quando o split estiver valendo.', param: false, fonte: { nome: 'Convergência Digital', url: 'https://convergenciadigital.com.br/?p=55591' } },
+    { coluna: 'semdata', titulo: 'Quanto de crédito gera a compra do Simples', situacao: 'O crédito é limitado ao CBS/IBS que o fornecedor paga dentro do DAS.', falta: 'O percentual depende do anexo e da faixa de cada fornecedor e vem informado na nota.', quando: 'A partir das notas de 2027', sistema: 'Usa 0% (conservador). Ajuste em Parâmetros se souber o percentual.', param: true, fonte: { nome: 'UAI', url: 'https://www.uai.com.br/?p=184595' } },
+    { coluna: 'semdata', titulo: 'Rejeição de nota fiscal sem os campos de IBS/CBS', situacao: 'A regra que rejeitaria a nota sem os grupos de IBS e CBS foi adiada.', falta: 'Nova data de entrada em produção.', quando: 'Sem data', sistema: 'Não afeta os cálculos. Vale preencher os campos mesmo assim.', param: false, fonte: { nome: 'Escola Superior ESN', url: 'https://escolasuperioresn.com.br/?p=12495' } },
+    { coluna: 'divergencia', titulo: 'Cursos livres, idiomas e cursos online', situacao: 'Fontes divergem se entram na redução de 60% da educação.', falta: 'Posição oficial ou consolidação do entendimento.', quando: 'Sem data', sistema: 'Usa alíquota cheia (mais cauteloso).', param: false, fonte: { nome: 'Taxup', url: 'https://taxup.com.br/reforma-tributaria-educacao/' } },
+    { coluna: 'divergencia', titulo: 'Procedimentos só estéticos em clínicas', situacao: 'Procedimento com finalidade exclusivamente cosmética pode ficar fora da redução da saúde.', falta: 'Classificação de cada procedimento pelo código NBS.', quando: 'Caso a caso', sistema: 'Aparece em Tipos de serviço como alíquota cheia, para confirmar.', param: false, fonte: { nome: 'Fiscalia', url: 'https://fiscalia.app/blog/clinicas-medicas-reducao-60-reforma-tributaria' } },
+    { coluna: 'divergencia', titulo: 'Veterinários: 30% ou 60%?', situacao: 'Hoje estão na lista de profissões com 30%.', falta: 'Há projeto no Senado para passá-los para a lista da saúde (60%).', quando: 'Depende do projeto', sistema: 'Usa 30%.', param: false, fonte: { nome: 'Senado Federal', url: 'https://legis.senado.leg.br/sdleg-getter/documento?dm=9958173' } },
+    { coluna: 'divergencia', titulo: 'Reduções com condições', situacao: 'Segurança da informação, atividades desportivas, produções culturais e profissões do art. 127 têm redução só se cumprirem condições (ex.: sócios habilitados no conselho, sem empresa como sócia).', falta: 'Conferir as condições de cada cliente.', quando: 'Caso a caso', sistema: 'Mostra a redução com o aviso "confirmar com o contador".', param: false, fonte: { nome: 'CRC-MG', url: 'https://crcmg.org.br/wp-content/uploads/2025/07/ApresentacaoReformaTributariaDanielCardosoProfissionaisContabeis.pdf' } },
+    { coluna: 'divergencia', titulo: 'Dividendos: "15% sobre qualquer valor"', situacao: 'Citado na reunião, mas não há lei aprovada com essa regra. A regra em vigor é 10% sobre o total acima de R$ 50 mil/mês (Lei 15.270/2025).', falta: 'Confirmar com a contabilidade de onde veio o número (o 15% na fonte que existe é do JCP).', quando: '—', sistema: 'Mostra 15% só como "cenário hipotético".', param: true, fonte: { nome: 'Tributário nos Bastidores', url: 'https://tributarionosbastidores.com.br/2026/10/trf4-questiona-retencao-de-10-sobre-lucros-e-dividendos-acima-de-50-000/amp/' } },
+    { coluna: 'limite', titulo: 'Dados só no navegador', situacao: 'Clientes e lançamentos ficam salvos só no computador de quem usa.', falta: 'Login e banco de dados para virar produto.', quando: 'Próxima etapa', sistema: 'Use Exportar/Importar em Parâmetros para não perder dados.', param: true, fonte: null },
+    { coluna: 'limite', titulo: 'Transição 2029–2032 não calculada', situacao: 'O sistema compara hoje x 2027–2028 e hoje x 2033.', falta: 'Calcular a troca gradual de ICMS/ISS por IBS ano a ano.', quando: 'Próxima etapa', sistema: '—', param: false, fonte: null },
+    { coluna: 'limite', titulo: 'Crédito de fornecedor com redução', situacao: 'O crédito das compras usa a alíquota cheia.', falta: 'Permitir informar a redução do setor de cada fornecedor (o crédito é o imposto que ele cobrou).', quando: 'Próxima etapa', sistema: 'Pode superestimar o crédito quando o fornecedor tem redução.', param: false, fonte: null },
+    { coluna: 'limite', titulo: 'IBS por cidade', situacao: 'O sistema usa uma alíquota única de IBS.', falta: 'Estados e municípios podem fixar alíquotas próprias.', quando: 'Quando as alíquotas locais saírem', sistema: 'Ajuste o IBS em Parâmetros para a cidade do cliente.', param: true, fonte: null },
+  ];
+  const COLUNAS_PEND = {
+    data: { nome: 'Tem prazo para sair', classe: 'accent', dica: 'Já existe data. Atualize os Parâmetros quando sair.' },
+    semdata: { nome: 'Ainda sem data definida', classe: 'warn', dica: 'Depende de regulamentação ou de cálculo oficial.' },
+    divergencia: { nome: 'Interpretação ou condições', classe: 'warn', dica: 'Confirmar caso a caso com o contador.' },
+    limite: { nome: 'Limitações do LeãoHub', classe: '', dica: 'O que o sistema ainda não faz.' },
+  };
+
+  function viewPendencias() {
     $app.innerHTML = `
       <header class="page-head">
-        <div><h1>Atas e reuniões</h1><p class="muted">Orientações dadas aos clientes, tarefas e pendências.</p></div>
-        <a class="btn" href="#/atas/nova">+ Nova ata</a>
+        <div><h1>O que ainda não está definido</h1>
+          <p class="muted">Quadro das regras da reforma que ainda podem mudar, e de como o LeãoHub trata cada uma. Revisado em 16/11/2026.</p></div>
       </header>
-      <section class="card">${atas.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Data</th><th>Cliente</th><th>Tema</th><th>Tarefas abertas</th></tr></thead>
-        <tbody>${atas.map((a) => {
-          const ab = (a.tarefas || []).filter((t) => t.status !== 'feita').length;
-          return `<tr><td>${dataBR(a.data)}</td><td>${esc(nomeCliente(a.clienteId))}</td><td><a href="#/atas/${a.id}">${esc(a.tema)}</a></td>
-            <td>${ab ? `<span class="badge warn">${ab}</span>` : '<span class="badge ok">0</span>'}</td></tr>`;
-        }).join('')}</tbody></table></div>` : '<p class="muted">Nenhuma ata registrada.</p>'}</section>`;
-  }
-
-  function linhaTarefa(t) {
-    t = t || {};
-    return `<div class="tarefa-row">
-      <input name="t_texto" placeholder="Tarefa" value="${esc(t.texto || '')}">
-      <input name="t_resp" placeholder="Responsável" value="${esc(t.responsavel || '')}">
-      <input name="t_prazo" type="date" value="${esc(t.prazo || '')}">
-      <button type="button" class="btn small secondary" data-action="removerTarefaRow">remover</button>
-    </div>`;
-  }
-
-  function viewAtaForm(clienteId) {
-    if (!db.clientes.length) { $app.innerHTML = '<section class="card"><p>Cadastre um cliente antes de registrar uma ata. <a href="#/clientes/novo">Novo cliente</a></p></section>'; return; }
-    $app.innerHTML = `
-      <header class="page-head"><div><h1>Nova ata</h1><p class="muted">Um item por linha nos campos de lista.</p></div></header>
-      <form class="card" id="form-ata">
-        <div class="fields">
-          <div><label>Cliente</label><select name="clienteId" required>${opcoesClientes(clienteId)}</select></div>
-          <div><label>Data da reunião</label><input name="data" type="date" required value="${hojeISO()}"></div>
-          <div class="full"><label>Participantes</label><input name="participantes" placeholder="Nome (empresa); Nome (escritório)"></div>
-          <div class="full"><label>Tema principal</label><input name="tema" required placeholder="Ex.: Impactos da reforma tributária"></div>
-          <div class="full"><label>Resumo <span class="hint">(até 3 pontos principais)</span></label><textarea name="resumo"></textarea></div>
-          <div class="full"><label>Orientações e decisões</label><textarea name="orientacoes"></textarea></div>
-          <div class="full"><label>Tarefas</label><div id="tarefas-rows">${linhaTarefa()}</div>
-            <button type="button" class="btn small secondary" data-action="addTarefaRow">+ tarefa</button></div>
-          <div class="full"><label>Pontos em aberto</label><textarea name="abertos"></textarea></div>
-          <div><label>Próxima reunião</label><input name="proxima" type="date"></div>
-          <div><label>Pauta sugerida</label><input name="pauta"></div>
-        </div>
-        <div class="form-foot"><button class="btn" type="submit">Salvar ata</button><a class="btn secondary" href="#/atas">Cancelar</a></div>
-      </form>`;
-    document.getElementById('form-ata').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      const textos = f.getAll('t_texto'), resps = f.getAll('t_resp'), prazos = f.getAll('t_prazo');
-      const tarefas = textos.map((t, i) => ({ texto: t.trim(), responsavel: (resps[i] || '').trim(), prazo: prazos[i] || '', status: 'aberta' })).filter((t) => t.texto);
-      const ata = {
-        id: uid(), clienteId: f.get('clienteId'), data: f.get('data'), participantes: f.get('participantes').trim(), tema: f.get('tema').trim(),
-        resumo: linhas(f.get('resumo')), orientacoes: linhas(f.get('orientacoes')), tarefas, abertos: linhas(f.get('abertos')),
-        proxima: f.get('proxima'), pauta: f.get('pauta').trim(),
-      };
-      db.atas.push(ata);
-      salvar();
-      toast('Ata salva.');
-      location.hash = '#/atas/' + ata.id;
-    });
-  }
-
-  function ataMarkdown(a) {
-    const lista = (arr) => (arr && arr.length ? arr.map((x) => `- ${x}`).join('\n') : '- —');
-    const tarefas = (a.tarefas || []).length
-      ? '| Tarefa | Responsável | Prazo | Status |\n|---|---|---|---|\n' + a.tarefas.map((t) => `| ${t.texto} | ${t.responsavel || '[RESPONSÁVEL A CONFIRMAR]'} | ${t.prazo ? dataBR(t.prazo) : '[PRAZO A DEFINIR]'} | ${t.status === 'feita' ? 'Feita' : 'A fazer'} |`).join('\n')
-      : 'Nenhuma tarefa registrada.';
-    return `# Ata — ${a.tema}
-**Cliente:** ${nomeCliente(a.clienteId)}
-**Data:** ${dataBR(a.data)}
-**Participantes:** ${a.participantes || '[A CONFIRMAR]'}
-
-## Resumo
-${lista(a.resumo)}
-
-## Orientações e decisões
-${(a.orientacoes || []).length ? a.orientacoes.map((x, i) => `${i + 1}. ${x}`).join('\n') : 'Nenhuma decisão formal registrada.'}
-
-## Tarefas
-${tarefas}
-
-## Pontos em aberto
-${lista(a.abertos)}
-
-## Próxima reunião
-- **Quando:** ${a.proxima ? dataBR(a.proxima) : '[A DEFINIR]'}
-- **Pauta sugerida:** ${a.pauta || '—'}
-`;
-  }
-
-  function viewAta(id) {
-    const a = db.atas.find((x) => x.id === id);
-    if (!a) return naoEncontrado();
-    const li = (arr) => (arr && arr.length ? `<ul>${arr.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : '<p class="muted">—</p>');
-    $app.innerHTML = `
-      <header class="page-head">
-        <div><h1>${esc(a.tema)}</h1><p class="muted"><a href="#/clientes/${a.clienteId}">${esc(nomeCliente(a.clienteId))}</a> · ${dataBR(a.data)}</p></div>
-        <div class="actions">
-          <button class="btn" data-action="copiarAta" data-id="${a.id}">Copiar (Markdown)</button>
-          <button class="btn secondary" data-action="baixarAta" data-id="${a.id}">Baixar .md</button>
-          <button class="btn secondary danger" data-action="excluirAta" data-confirm="Excluir esta ata?" data-id="${a.id}" style="color:#fff">Excluir</button>
-        </div>
-      </header>
-      <section class="card ata">
-        <p><b>Participantes:</b> ${esc(a.participantes) || '<span class="badge warn">A confirmar</span>'}</p>
-        <h3>Resumo</h3>${li(a.resumo)}
-        <h3>Orientações e decisões</h3>${(a.orientacoes || []).length ? `<ol>${a.orientacoes.map((x) => `<li>${esc(x)}</li>`).join('')}</ol>` : '<p class="muted">Nenhuma decisão formal registrada.</p>'}
-        <h3>Tarefas</h3>
-        ${(a.tarefas || []).length ? `<div class="table-wrap"><table><thead><tr><th>Tarefa</th><th>Responsável</th><th>Prazo</th><th></th></tr></thead><tbody>
-          ${a.tarefas.map((t, i) => `<tr><td class="${t.status === 'feita' ? 'done' : ''}">${esc(t.texto)}</td>
-            <td>${t.responsavel ? esc(t.responsavel) : '<span class="badge warn">A confirmar</span>'}</td>
-            <td>${t.prazo ? dataBR(t.prazo) : '<span class="muted">A definir</span>'}</td>
-            <td class="num"><button class="btn small secondary" data-action="toggleTarefa" data-id="${a.id}:${i}">${t.status === 'feita' ? 'Reabrir' : 'Concluir'}</button></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="muted">Nenhuma tarefa.</p>'}
-        <h3>Pontos em aberto</h3>${li(a.abertos)}
-        <h3>Próxima reunião</h3>
-        <p><b>Quando:</b> ${a.proxima ? dataBR(a.proxima) : 'A definir'}<br><b>Pauta sugerida:</b> ${esc(a.pauta) || '—'}</p>
-      </section>`;
+      <div class="quadro">
+        ${Object.keys(COLUNAS_PEND).map((k) => {
+          const itens = PENDENCIAS.filter((x) => x.coluna === k);
+          return `<section class="coluna">
+            <div class="coluna-head"><span class="badge ${COLUNAS_PEND[k].classe}">${esc(COLUNAS_PEND[k].nome)}</span><span class="muted small">${itens.length}</span></div>
+            <p class="muted small">${esc(COLUNAS_PEND[k].dica)}</p>
+            ${itens.map((x) => `<article class="pend">
+              <h3>${esc(x.titulo)}</h3>
+              <p class="small">${esc(x.situacao)}</p>
+              <p class="small"><b>Falta:</b> ${esc(x.falta)}</p>
+              <p class="small"><b>Quando:</b> ${esc(x.quando)}</p>
+              <p class="small muted"><b>No sistema:</b> ${esc(x.sistema)}${x.param ? ' <a href="#/config">Parâmetros</a>' : ''}</p>
+              ${x.fonte ? `<p class="small"><a href="${esc(x.fonte.url)}" target="_blank" rel="noopener">Fonte: ${esc(x.fonte.nome)}</a></p>` : ''}
+            </article>`).join('')}
+          </section>`;
+        }).join('')}
+      </div>
+      <div class="note info">Quando um item for definido, basta atualizar o valor em Parâmetros. As estimativas não substituem a análise do contador.</div>`;
   }
 
   // --- configurações
@@ -1179,7 +1057,7 @@ ${lista(a.abertos)}
           <button class="btn secondary" data-action="copiarBackup">Copiar backup</button>
           <label class="btn secondary" style="margin:0">Importar .json<input id="importar" type="file" accept="application/json" hidden></label>
           <button class="btn secondary" data-action="resetDemo" data-confirm="Substituir todos os dados pelos dados de exemplo?">Recarregar dados de exemplo</button>
-          <button class="btn danger" data-action="limparTudo" data-confirm="Apagar todos os clientes, lançamentos e atas?">Apagar tudo</button>
+          <button class="btn danger" data-action="limparTudo" data-confirm="Apagar todos os clientes e lançamentos?">Apagar tudo</button>
         </div>
       </section>`;
     document.getElementById('form-params').addEventListener('submit', (e) => {
@@ -1212,31 +1090,16 @@ ${lista(a.abertos)}
     excluirCliente(id) {
       db.clientes = db.clientes.filter((c) => c.id !== id);
       db.lancamentos = db.lancamentos.filter((l) => l.clienteId !== id);
-      db.atas = db.atas.filter((a) => a.clienteId !== id);
       salvar(); location.hash = '#/clientes';
-    },
-    excluirAta(id) { db.atas = db.atas.filter((a) => a.id !== id); salvar(); location.hash = '#/atas'; },
-    toggleTarefa(ref) {
-      const [ataId, idx] = ref.split(':');
-      const a = db.atas.find((x) => x.id === ataId);
-      const t = a && a.tarefas[Number(idx)];
-      if (t) { t.status = t.status === 'feita' ? 'aberta' : 'feita'; salvar(); render(); }
-    },
-    addTarefaRow() { document.getElementById('tarefas-rows').insertAdjacentHTML('beforeend', linhaTarefa()); },
-    removerTarefaRow(_id, el) { el.closest('.tarefa-row').remove(); },
-    copiarAta(id) { const a = db.atas.find((x) => x.id === id); if (a) copiar(ataMarkdown(a)); },
-    baixarAta(id) {
-      const a = db.atas.find((x) => x.id === id);
-      if (a) baixar(`ata-${a.data || 'reuniao'}.md`, ataMarkdown(a), 'text/markdown;charset=utf-8');
     },
     copiarSimulacao() { const t = textoSimulacao(); if (t) copiar(t); },
     restaurarParams() { db.params = Object.assign({}, PARAMS_PADRAO); salvar(); toast('Parâmetros restaurados.'); render(); },
     consultarCnpj(prefixo) { consultarCnpj(prefixo); },
     copiarBackup() { copiar(JSON.stringify(db, null, 2)); },
     exportar() { baixar(`leaohub-backup-${hojeISO()}.json`, JSON.stringify(db, null, 2), 'application/json'); },
-    resetDemo() { db = dadosDemo(); salvar(); toast('Dados de exemplo carregados.'); location.hash = '#/'; render(); },
+    resetDemo() { db = dadosDemo(); salvar(); toast('Dados de exemplo carregados.'); location.hash = '#/clientes'; render(); },
     limparTudo() {
-      db = normalizar({ params: db.params }); salvar(); toast('Dados apagados.'); location.hash = '#/'; render();
+      db = normalizar({ params: db.params }); salvar(); toast('Dados apagados.'); location.hash = '#/clientes'; render();
     },
   };
 
@@ -1261,10 +1124,10 @@ ${lista(a.abertos)}
 
   function render() {
     const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-    marcarNav(a || '');
+    marcarNav(a || 'simulador');
     try {
       switch (a) {
-        case undefined: viewPainel(); break;
+        case undefined: viewSimulador(); break;
         case 'clientes':
           if (!b) viewClientes();
           else if (b === 'novo') viewClienteForm();
@@ -1274,14 +1137,10 @@ ${lista(a.abertos)}
         case 'simulador': viewSimulador(b); break;
         case 'cenarios': viewCenarios(); break;
         case 'servicos': viewServicos(); break;
+        case 'pendencias': viewPendencias(); break;
         case 'portal': if (b) viewPortal(b); else viewPortalEscolha(); break;
-        case 'atas':
-          if (!b) viewAtas();
-          else if (b === 'nova') viewAtaForm(c);
-          else viewAta(b);
-          break;
         case 'config': viewConfig(); break;
-        default: viewPainel();
+        default: viewSimulador();
       }
     } catch (err) {
       console.error(err);
