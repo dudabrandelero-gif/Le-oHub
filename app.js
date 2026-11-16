@@ -1,8 +1,8 @@
 /*
  * LeãoHub — protótipo de sistema para escritórios de contabilidade.
- * Módulos: simulador da reforma tributária (CBS/IBS), cenários PF x PJ, tipos de serviço,
- * quadro do que ainda não está definido, clientes e portal do cliente.
- * Sem servidor: os dados ficam no localStorage do navegador.
+ * Módulos: simulador da reforma tributária (CBS/IBS), cenários PF x PJ, tipos de serviço
+ * e quadro do que ainda não está definido.
+ * Sem servidor: só os parâmetros (alíquotas) ficam salvos no localStorage do navegador.
  */
 'use strict';
 (function () {
@@ -56,19 +56,6 @@
       if (alvo) alvo.outerHTML = dicaSetor(e.target.value);
     }
   });
-  const REGIMES = {
-    simples: 'Simples Nacional',
-    presumido: 'Lucro Presumido',
-    real: 'Lucro Real',
-    pf: 'Pessoa física (carnê-leão)',
-  };
-  const CATEGORIAS = {
-    receita: 'Receita / nota emitida',
-    fornecedor: 'Compra de fornecedor (gera crédito)',
-    simples: 'Compra de fornecedor do Simples',
-    folha: 'Folha de pagamento (não gera crédito)',
-    outros: 'Outras despesas (sem crédito)',
-  };
   // Revisão de nov/2026:
   // - CBS 2027–2028: referência de 11,3% calculada pelo TCU em 28/10/2026 (cobrança de 11,2% + 0,1% de IBS de teste).
   // - Regime completo (2033): estimativa do Comitê Gestor do IBS (Res. CGIBS 14/2026): IBS 18,70% + CBS 9,21% = 27,91%.
@@ -97,11 +84,7 @@
   const pct = (v) => (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 }) + '%';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = (v) => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : 0; };
-  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const hojeISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
   const dataBR = (iso) => { if (!iso) return '—'; const [y, m, d] = String(iso).slice(0, 10).split('-'); return d && m && y ? `${d}/${m}/${y}` : esc(iso); };
-  const mesBR = (ym) => { const [y, m] = ym.split('-'); return `${m}/${y}`; };
-  const linhas = (txt) => String(txt || '').split('\n').map((l) => l.trim()).filter(Boolean);
 
   function toast(msg) {
     const t = document.getElementById('toast');
@@ -126,33 +109,6 @@
     try { document.execCommand('copy'); toast('Copiado!'); } catch (e) { toast('Não foi possível copiar.'); }
     ta.remove();
   }
-  // Confirmação desenhada na página (a janela nativa do navegador é bloqueada em alguns ambientes).
-  function confirmar(msg, aoConfirmar) {
-    const fundo = document.createElement('div');
-    fundo.className = 'modal-bg';
-    fundo.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><p>${esc(msg)}</p>
-      <div class="actions"><button class="btn danger" data-modal="ok">Confirmar</button><button class="btn secondary" data-modal="cancelar">Cancelar</button></div></div>`;
-    fundo.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-modal]');
-      if (!b && e.target !== fundo) return;
-      e.stopPropagation();
-      fundo.remove();
-      if (b && b.dataset.modal === 'ok') aoConfirmar();
-    });
-    document.body.appendChild(fundo);
-    fundo.querySelector('[data-modal=ok]').focus();
-  }
-
-  function baixar(nome, conteudo, tipo) {
-    const blob = new Blob([conteudo], { type: tipo || 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = nome;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-  }
-
   // ---------------------------------------------------------------- consulta de CNPJ (Simples Nacional / MEI)
   // Usa dados públicos da Receita Federal via BrasilAPI e, se falhar, via CNPJá (API aberta).
   const soNumeros = (s) => String(s || '').replace(/\D/g, '');
@@ -238,14 +194,7 @@
     }
   }
 
-  // ---------------------------------------------------------------- dados
-  function normalizar(d) {
-    return {
-      clientes: Array.isArray(d.clientes) ? d.clientes : [],
-      lancamentos: Array.isArray(d.lancamentos) ? d.lancamentos : [],
-      params: migrarParams(d.params),
-    };
-  }
+  // ---------------------------------------------------------------- dados (só parâmetros)
   function migrarParams(antigos) {
     const p = Object.assign({}, PARAMS_PADRAO, antigos || {});
     if (!antigos || (antigos.versao || 1) < VERSAO_PARAMS) {
@@ -253,53 +202,15 @@
     }
     return p;
   }
-  function carregar() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return normalizar(JSON.parse(raw));
-    } catch (e) { /* sem storage: segue com dados de demonstração */ }
-    return dadosDemo();
+  function lerArmazenado() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) { return {}; }
   }
   function salvar() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); } catch (e) { /* ignora */ }
+    // Grava só os parâmetros, mantendo o resto do que já estava salvo.
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(Object.assign(lerArmazenado(), { params: db.params }))); } catch (e) { /* ignora */ }
   }
+  const db = { params: migrarParams(lerArmazenado().params) };
 
-  function dadosDemo() {
-    const mes = hojeISO().slice(0, 8); // AAAA-MM-
-    const c1 = 'demo-clinica', c2 = 'demo-mercado', c3 = 'demo-studio';
-    return normalizar({
-      clientes: [
-        { id: c1, nome: 'Clínica Sorriso Exemplo Ltda', cnpj: '00.000.000/0001-00', regime: 'presumido', setor: 'saude', contato: 'Dra. Ana (sócia)', email: 'contato@clinicaexemplo.com.br', faturamento: 50000, obs: 'Dentistas PJ com repasse por atendimento.' },
-        { id: c2, nome: 'Mercado Bom Preço Exemplo', cnpj: '11.111.111/0001-11', regime: 'real', setor: 'geral', contato: 'Carlos (financeiro)', email: 'financeiro@mercadoexemplo.com.br', faturamento: 180000, obs: '' },
-        { id: c3, nome: 'Studio Design Exemplo ME', cnpj: '22.222.222/0001-22', regime: 'simples', setor: 'servicos', contato: 'Júlia', email: 'julia@studioexemplo.com.br', faturamento: 25000, obs: 'Avaliar se continua no Simples após a reforma.' },
-        { id: 'demo-saas', nome: 'EduTech Exemplo Ltda', cnpj: '33.333.333/0001-33', regime: 'presumido', setor: 'software', contato: 'Equipe financeira', email: 'financeiro@edutechexemplo.com.br', faturamento: 40000, obs: 'Vende plataforma para escolas (assinatura) e comunidade online.' },
-      ],
-      lancamentos: [
-        { id: uid(), clienteId: c1, categoria: 'receita', descricao: 'Atendimentos do mês', valor: 50000, data: mes + '05', anexo: 'relatorio-atendimentos.pdf', status: 'conferido', origem: 'cliente' },
-        { id: uid(), clienteId: c1, categoria: 'fornecedor', descricao: 'Materiais odontológicos', valor: 12000, data: mes + '08', anexo: 'nf-materiais.pdf', status: 'pendente', origem: 'cliente' },
-        { id: uid(), clienteId: c1, categoria: 'fornecedor', descricao: 'Repasse dentistas PJ (NF para a clínica)', valor: 8000, data: mes + '10', anexo: '', status: 'pendente', origem: 'cliente' },
-        { id: uid(), clienteId: c1, categoria: 'simples', descricao: 'Laboratório de prótese (Simples)', valor: 3000, data: mes + '10', anexo: '', status: 'pendente', origem: 'cliente' },
-        { id: uid(), clienteId: c1, categoria: 'folha', descricao: 'Folha de pagamento', valor: 15000, data: mes + '05', anexo: '', status: 'conferido', origem: 'escritorio' },
-        { id: uid(), clienteId: c2, categoria: 'receita', descricao: 'Vendas do mês', valor: 180000, data: mes + '03', anexo: '', status: 'conferido', origem: 'escritorio' },
-        { id: uid(), clienteId: c2, categoria: 'fornecedor', descricao: 'Compra de mercadorias', valor: 110000, data: mes + '06', anexo: 'nf-distribuidora.xml', status: 'pendente', origem: 'cliente' },
-      ],
-    });
-  }
-
-  let db = carregar();
-  const cliente = (id) => db.clientes.find((c) => c.id === id);
-  const nomeCliente = (id) => (cliente(id) || {}).nome || '(cliente removido)';
-
-  function resumoMes(clienteId, ym) {
-    const r = { receita: 0, fornecedor: 0, simples: 0, folha: 0, outros: 0 };
-    db.lancamentos.filter((l) => l.clienteId === clienteId && String(l.data).startsWith(ym))
-      .forEach((l) => { r[l.categoria] = (r[l.categoria] || 0) + num(l.valor); });
-    return r;
-  }
-  function mesesDoCliente(clienteId) {
-    const set = new Set(db.lancamentos.filter((l) => l.clienteId === clienteId && l.data).map((l) => l.data.slice(0, 7)));
-    return Array.from(set).sort().reverse();
-  }
   // ---------------------------------------------------------------- cálculo da reforma
   /*
    * Simulação mensal simplificada (regime pleno, sem fase de transição).
@@ -353,149 +264,15 @@
   }
 
   // ---------------------------------------------------------------- componentes
-  const badgeStatus = (s) => s === 'conferido' ? '<span class="badge ok">Conferido</span>' : '<span class="badge warn">Pendente</span>';
   const opcoes = (obj, sel, rotulo) => Object.keys(obj).map((k) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(rotulo ? rotulo(obj[k]) : obj[k])}</option>`).join('');
-  const opcoesClientes = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : '') + db.clientes.map((c) => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${esc(c.nome)}</option>`).join('');
-
-  function tabelaLanc(lista, opts) {
-    opts = opts || {};
-    if (!lista.length) return '<p class="muted">Nenhum lançamento.</p>';
-    const linhasHtml = lista.slice().sort((a, b) => String(b.data).localeCompare(String(a.data))).map((l) => `
-      <tr>
-        <td>${dataBR(l.data)}</td>
-        ${opts.mostrarCliente ? `<td><a href="#/clientes/${l.clienteId}">${esc(nomeCliente(l.clienteId))}</a></td>` : ''}
-        <td>${esc(l.descricao)}${l.fornecedorNome ? `<div class="muted small">Fornecedor: ${esc(l.fornecedorNome)} · ${l.fornecedorTipo === 'regular' ? 'fora do Simples' : l.fornecedorTipo === 'mei' ? 'MEI' : 'Simples Nacional'}</div>` : ''}${l.anexo ? `<div class="muted small">📎 ${esc(l.anexo)}</div>` : ''}</td>
-        <td>${esc(CATEGORIAS[l.categoria] || l.categoria)}</td>
-        <td class="num">${brl(l.valor)}</td>
-        <td>${badgeStatus(l.status)}</td>
-        ${opts.escritorio ? `<td class="num">
-          ${l.status !== 'conferido' ? `<button class="btn small" data-action="conferir" data-id="${l.id}">Conferir</button>` : ''}
-          <button class="link-btn danger small" data-action="excluirLanc" data-confirm="Excluir este lançamento?" data-id="${l.id}">excluir</button></td>` : ''}
-      </tr>`).join('');
-    return `<div class="table-wrap"><table>
-      <thead><tr><th>Data</th>${opts.mostrarCliente ? '<th>Cliente</th>' : ''}<th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th>Status</th>${opts.escritorio ? '<th></th>' : ''}</tr></thead>
-      <tbody>${linhasHtml}</tbody></table></div>`;
-  }
 
   // ---------------------------------------------------------------- telas
-  function viewClientes() {
-    $app.innerHTML = `
-      <header class="page-head">
-        <div><h1>Clientes</h1><p class="muted">Empresas atendidas pelo escritório.</p></div>
-        <a class="btn" href="#/clientes/novo">+ Novo cliente</a>
-      </header>
-      <section class="card">${db.clientes.length ? `<div class="table-wrap"><table>
-        <thead><tr><th>Cliente</th><th>CNPJ/CPF</th><th>Regime</th><th>Setor</th><th class="num">Faturamento/mês</th><th>Pendências</th></tr></thead>
-        <tbody>${db.clientes.map((c) => {
-          const p = db.lancamentos.filter((l) => l.clienteId === c.id && l.status !== 'conferido').length;
-          return `<tr><td><a href="#/clientes/${c.id}"><b>${esc(c.nome)}</b></a><div class="muted small">${esc(c.contato)}</div></td>
-            <td>${esc(c.cnpj)}</td><td>${esc(REGIMES[c.regime] || '')}</td><td>${esc((SETORES[c.setor] || {}).nome || '')}</td>
-            <td class="num">${brl(c.faturamento)}</td><td>${p ? `<span class="badge warn">${p} envio(s)</span>` : '<span class="badge ok">Em dia</span>'}</td></tr>`;
-        }).join('')}</tbody></table></div>` : '<p class="muted">Nenhum cliente cadastrado ainda.</p>'}</section>`;
-  }
-
-  function viewClienteForm(id) {
-    const c = id ? cliente(id) : null;
-    if (id && !c) return naoEncontrado();
-    const v = c || { nome: '', cnpj: '', regime: 'presumido', setor: 'servicos', contato: '', email: '', faturamento: '', obs: '' };
-    $app.innerHTML = `
-      <header class="page-head"><div><h1>${c ? 'Editar cliente' : 'Novo cliente'}</h1></div></header>
-      <form class="card" id="form-cliente">
-        <div class="fields">
-          <div class="full"><label>Nome / razão social</label><input name="nome" required value="${esc(v.nome)}"></div>
-          <div><label>CNPJ ou CPF</label>
-            <div class="cnpj-box"><input name="cnpj" id="cli-cnpj-input" data-cnpj="cli-cnpj" value="${esc(v.cnpj)}">
-              <button type="button" class="btn secondary" data-action="consultarCnpj" data-id="cli-cnpj">Buscar dados</button></div>
-            <div id="cli-cnpj-res" class="small" style="margin-top:6px"></div></div>
-          <div><label>Faturamento médio mensal (R$)</label><input name="faturamento" type="number" step="0.01" min="0" value="${esc(v.faturamento)}"></div>
-          <div><label>Regime tributário</label><select name="regime">${opcoes(REGIMES, v.regime)}</select></div>
-          <div><label>Tipo de atividade <span class="hint">(define a redução na reforma)</span></label><select name="setor" data-setor>${opcoes(SETORES, v.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select>${dicaSetor(v.setor)}</div>
-          <div><label>Contato</label><input name="contato" value="${esc(v.contato)}"></div>
-          <div><label>E-mail</label><input name="email" type="email" value="${esc(v.email)}"></div>
-          <div class="full"><label>Observações</label><textarea name="obs">${esc(v.obs)}</textarea></div>
-        </div>
-        <div class="form-foot"><button class="btn" type="submit">Salvar</button><a class="btn secondary" href="${c ? '#/clientes/' + c.id : '#/clientes'}">Cancelar</a></div>
-      </form>`;
-    cnpjRetornos['cli-cnpj'] = (info) => {
-      const f = document.getElementById('form-cliente');
-      if (!f.elements.nome.value.trim()) f.elements.nome.value = info.razao;
-      if (info.simples || info.mei) f.elements.regime.value = 'simples';
-      else if (f.elements.regime.value === 'simples') f.elements.regime.value = 'presumido';
-    };
-    document.getElementById('form-cliente').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      const dados = {
-        nome: f.get('nome').trim(), cnpj: f.get('cnpj').trim(), regime: f.get('regime'), setor: f.get('setor'),
-        contato: f.get('contato').trim(), email: f.get('email').trim(), faturamento: num(f.get('faturamento')), obs: f.get('obs').trim(),
-      };
-      let alvo;
-      if (c) { Object.assign(c, dados); alvo = c.id; } else { alvo = uid(); db.clientes.push(Object.assign({ id: alvo }, dados)); }
-      salvar();
-      toast('Cliente salvo.');
-      location.hash = '#/clientes/' + alvo;
-    });
-  }
-
-  function viewCliente(id) {
-    const c = cliente(id);
-    if (!c) return naoEncontrado();
-    const lancs = db.lancamentos.filter((l) => l.clienteId === id);
-    const meses = mesesDoCliente(id);
-    const mesRef = meses[0];
-    const res = mesRef ? resumoMes(id, mesRef) : null;
-    const est = res ? calcularReforma({ escopo: 'cbs', regimeAtual: c.regime === 'real' ? 'real' : 'presumido', setor: c.setor, receita: res.receita, despReg: res.fornecedor, despSimples: res.simples, folha: res.folha, iss: 0, creditoAnterior: 0 }, db.params) : null;
-    $app.innerHTML = `
-      <header class="page-head">
-        <div><h1>${esc(c.nome)}</h1><p class="muted">${esc(REGIMES[c.regime] || '')} · ${esc((SETORES[c.setor] || {}).nome || '')} · ${esc(c.cnpj)}</p></div>
-        <div class="actions">
-          <a class="btn" href="#/simulador/${c.id}">Simular reforma</a>
-          <a class="btn secondary" href="#/portal/${c.id}">Abrir portal do cliente</a>
-          <a class="btn secondary" href="#/clientes/${c.id}/editar">Editar</a>
-        </div>
-      </header>
-      <div class="grid-2">
-        <section class="card"><h2>Dados</h2>
-          <p><b>Contato:</b> ${esc(c.contato) || '—'}<br><b>E-mail:</b> ${esc(c.email) || '—'}<br><b>Faturamento médio:</b> ${brl(c.faturamento)}</p>
-          ${c.obs ? `<p class="muted">${esc(c.obs)}</p>` : ''}
-          ${c.regime === 'simples' ? '<div class="note">Empresa do Simples: avaliar se continua no regime. Clientes PJ dela não aproveitam crédito cheio de CBS/IBS.</div>' : ''}
-          <p style="margin-top:16px"><button class="link-btn danger" data-action="excluirCliente" data-confirm="Excluir o cliente e os lançamentos dele?" data-id="${c.id}">Excluir cliente</button></p>
-        </section>
-        <section class="card"><h2>Reforma: estimativa do mês${mesRef ? ' ' + mesBR(mesRef) : ''}</h2>
-          ${est ? `<table class="calc-lines"><tbody>
-            <tr><td>Receitas lançadas</td><td class="num">${brl(res.receita)}</td></tr>
-            <tr><td>PIS/COFINS hoje</td><td class="num">${brl(est.totalHoje)}</td></tr>
-            <tr><td>CBS em 2027 (após créditos)</td><td class="num">${brl(est.aPagar)}</td></tr>
-            <tr class="total"><td>Diferença por mês</td><td class="num">${est.diferenca > 0 ? '+' : ''}${brl(est.diferenca)}</td></tr></tbody></table>
-            <p class="muted small">Estimativa com os lançamentos do mês. Veja os detalhes no simulador.</p>`
-          : '<p class="muted">Sem lançamentos ainda. Use o simulador com o faturamento médio.</p>'}
-        </section>
-      </div>
-      <section class="card" style="margin-top:18px"><h2>Lançamentos enviados</h2>${tabelaLanc(lancs, { escritorio: true })}</section>`;
-  }
-
   // --- simulador
-  function viewSimulador(clienteId) {
+  function viewSimulador(param) {
     const p = db.params;
     // '#/simulador/setor-xxx' abre o simulador já com o tipo de atividade escolhido (vem da aba de tipos de serviço).
-    const setorPedido = clienteId && clienteId.startsWith('setor-') ? clienteId.slice(6) : null;
-    if (setorPedido) clienteId = null;
-    const c = clienteId ? cliente(clienteId) : null;
+    const setorPedido = param && param.startsWith('setor-') ? param.slice(6) : null;
     const ini = { receita: 50000, despReg: 20000, despSimples: 0, folha: 0, setor: SETORES[setorPedido] ? setorPedido : 'saude', regimeAtual: 'presumido', escopo: 'cbs', iss: p.issPadrao, creditoAnterior: 0, dividendos: 0 };
-    let origem = 'Valores de exemplo (receita R$ 50 mil, despesas R$ 20 mil).';
-    if (c) {
-      ini.setor = c.setor;
-      ini.regimeAtual = c.regime === 'real' ? 'real' : 'presumido';
-      const meses = mesesDoCliente(c.id);
-      if (meses.length) {
-        const r = resumoMes(c.id, meses[0]);
-        Object.assign(ini, { receita: r.receita || num(c.faturamento), despReg: r.fornecedor, despSimples: r.simples, folha: r.folha });
-        origem = `Valores dos lançamentos de ${mesBR(meses[0])}.`;
-      } else {
-        Object.assign(ini, { receita: num(c.faturamento), despReg: 0 });
-        origem = 'Receita pelo faturamento médio cadastrado; preencha as despesas.';
-      }
-    }
     const campo = (nome, rot, val, extra) => `<div><label>${rot}</label><input name="${nome}" type="number" step="0.01" min="0" value="${val}" ${extra || ''}></div>`;
     $app.innerHTML = `
       <header class="page-head">
@@ -505,8 +282,6 @@
       <div class="sim">
         <form class="card" id="form-sim">
           <div class="fields" style="grid-template-columns:1fr">
-            <div><label>Cliente</label><select id="sim-cliente">${opcoesClientes(clienteId, 'Simulação livre')}</select>
-              <div class="muted small" style="margin-top:4px">${esc(origem)}</div></div>
             <div><label>O que comparar</label><select name="escopo">
               <option value="cbs" ${ini.escopo === 'cbs' ? 'selected' : ''}>2027–2028: PIS/COFINS → CBS (${pct(p.cbs)})</option>
               <option value="cbs_ibs">2033 em diante: PIS/COFINS + ISS → CBS + IBS (${pct(p.cbs2033 + p.ibs)})</option></select></div>
@@ -535,12 +310,11 @@
       };
       const r = calcularReforma(inp, p);
       const div = calcularDividendos(num(f.get('dividendos')), p);
-      viewSimulador.ultimo = { inp, r, div, dividendos: num(f.get('dividendos')), cliente: c ? c.nome : null };
+      viewSimulador.ultimo = { inp, r, div, dividendos: num(f.get('dividendos')), };
       document.getElementById('sim-resultado').innerHTML = resultadoSimulacao(inp, r, div, num(f.get('dividendos')), p);
     };
     form.addEventListener('input', atualizar);
     form.addEventListener('submit', (e) => e.preventDefault());
-    document.getElementById('sim-cliente').addEventListener('change', (e) => { location.hash = e.target.value ? '#/simulador/' + e.target.value : '#/simulador'; });
     atualizar();
   }
 
@@ -592,7 +366,7 @@
     if (!s) return '';
     const { inp, r, div, dividendos } = s;
     const out = [
-      `Simulação da reforma tributária${s.cliente ? ' — ' + s.cliente : ''}`,
+      'Simulação da reforma tributária',
       `Receita do mês: ${brl(inp.receita)} | Compras com crédito: ${brl(inp.despReg)} | Compras do Simples: ${brl(inp.despSimples)} | Folha: ${brl(inp.folha)}`,
       `Hoje (${r.comIbs ? 'PIS/COFINS + ISS' : 'PIS/COFINS'}): ${brl(r.totalHoje)}`,
       `Reforma: débito ${brl(r.debito)} − créditos ${brl(r.credito)} = a pagar ${brl(r.aPagar)}`,
@@ -887,83 +661,6 @@
     desenhar();
   }
 
-  // --- portal do cliente
-  function viewPortalEscolha() {
-    $app.innerHTML = `
-      <header class="page-head"><div><h1>Portal do cliente</h1>
-        <p class="muted">Área em que o cliente envia notas e despesas. No protótipo, escolha o cliente para ver a tela como ele veria.</p></div></header>
-      <div class="client-cards">${db.clientes.map((c) => `<a class="client-card" href="#/portal/${c.id}"><b>${esc(c.nome)}</b><div class="muted small">${esc(c.contato)}</div></a>`).join('') || '<p class="muted">Cadastre um cliente primeiro.</p>'}</div>`;
-  }
-
-  function viewPortal(id) {
-    const c = cliente(id);
-    if (!c) return naoEncontrado();
-    const meses = mesesDoCliente(id);
-    const mesSel = viewPortal.mes && meses.includes(viewPortal.mes) ? viewPortal.mes : (meses[0] || hojeISO().slice(0, 7));
-    const r = resumoMes(id, mesSel);
-    const calc = calcularReforma({ escopo: 'cbs', regimeAtual: c.regime === 'real' ? 'real' : 'presumido', setor: c.setor, receita: r.receita, despReg: r.fornecedor, despSimples: r.simples, folha: r.folha, iss: 0, creditoAnterior: 0 }, db.params);
-    const lancs = db.lancamentos.filter((l) => l.clienteId === id);
-    $app.innerHTML = `
-      <header class="page-head">
-        <div><p class="muted small" style="margin:0">Portal do cliente</p><h1>Olá, ${esc(c.contato || c.nome)}</h1><p class="muted">${esc(c.nome)}</p></div>
-        <a class="btn secondary" href="#/clientes/${c.id}">Voltar à visão do escritório</a>
-      </header>
-      <div class="grid-2">
-        <form class="card" id="form-lanc">
-          <h2>Enviar nota ou despesa</h2>
-          <div class="fields">
-            <div class="full">${blocoCnpj('portal-cnpj', 'CNPJ do fornecedor <span class="hint">(opcional: descobre se é do Simples)</span>')}</div>
-            <div class="full"><label>Tipo</label><select name="categoria">${opcoes(CATEGORIAS, 'fornecedor')}</select></div>
-            <div class="full"><label>Descrição</label><input name="descricao" required placeholder="Ex.: Materiais de consumo — fornecedor X"></div>
-            <div><label>Valor (R$)</label><input name="valor" type="number" step="0.01" min="0.01" required></div>
-            <div><label>Data</label><input name="data" type="date" required value="${hojeISO()}"></div>
-            <div class="full"><label>Arquivo da nota <span class="hint">(no protótipo, só o nome é guardado)</span></label><input name="anexo" type="file"></div>
-          </div>
-          <div class="form-foot"><button class="btn" type="submit">Enviar para o escritório</button></div>
-          <div class="note info">Dica: compras feitas no CNPJ (PJ) geram crédito na reforma; compras no CPF não geram.</div>
-        </form>
-        <section class="card">
-          <h2>Resumo do mês</h2>
-          <label>Mês</label>
-          <select id="portal-mes">${(meses.length ? meses : [mesSel]).map((m) => `<option value="${m}" ${m === mesSel ? 'selected' : ''}>${mesBR(m)}</option>`).join('')}</select>
-          <table class="calc-lines" style="margin-top:10px"><tbody>
-            <tr><td>Receitas</td><td class="num">${brl(r.receita)}</td></tr>
-            <tr><td>Compras que geram crédito</td><td class="num">${brl(r.fornecedor)}</td></tr>
-            <tr><td>Compras do Simples</td><td class="num">${brl(r.simples)}</td></tr>
-            <tr><td>Folha e outras despesas</td><td class="num">${brl(r.folha + r.outros)}</td></tr>
-            <tr class="total"><td>Estimativa de CBS a pagar (após créditos)</td><td class="num">${brl(calc.aPagar)}</td></tr>
-            <tr><td>Crédito estimado para o próximo mês</td><td class="num">${brl(calc.creditoProx)}</td></tr>
-          </tbody></table>
-          <p class="muted small">Estimativa simplificada. O valor oficial é calculado pelo escritório.</p>
-        </section>
-      </div>
-      <section class="card" style="margin-top:18px"><h2>Meus envios</h2>${tabelaLanc(lancs)}</section>`;
-    document.getElementById('portal-mes').addEventListener('change', (e) => { viewPortal.mes = e.target.value; render(); });
-    let fornecedor = null;
-    cnpjRetornos['portal-cnpj'] = (info) => {
-      fornecedor = info;
-      const f = document.getElementById('form-lanc');
-      if (['fornecedor', 'simples'].includes(f.elements.categoria.value)) f.elements.categoria.value = tipoEmpresa(info) === 'regular' ? 'fornecedor' : 'simples';
-      if (!f.elements.descricao.value.trim()) f.elements.descricao.value = 'Compra — ' + (info.fantasia || info.razao);
-    };
-    document.getElementById('form-lanc').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const f = new FormData(e.target);
-      const arq = f.get('anexo');
-      const cnpjDigitado = soNumeros(document.getElementById('portal-cnpj-input').value);
-      const forn = fornecedor && fornecedor.cnpj === cnpjDigitado ? fornecedor : null;
-      db.lancamentos.push({
-        id: uid(), clienteId: id, categoria: f.get('categoria'), descricao: f.get('descricao').trim(), valor: num(f.get('valor')),
-        data: f.get('data'), anexo: arq && arq.name ? arq.name : '', status: 'pendente', origem: 'cliente',
-        fornecedorCnpj: forn ? forn.cnpj : (cnpjDigitado || ''), fornecedorNome: forn ? (forn.fantasia || forn.razao) : '', fornecedorTipo: forn ? tipoEmpresa(forn) : '',
-      });
-      viewPortal.mes = String(f.get('data')).slice(0, 7);
-      salvar();
-      toast('Enviado para o escritório.');
-      render();
-    });
-  }
-
   // --- quadro: o que ainda não está definido (revisado em 16/11/2026)
   // coluna: 'data' (tem prazo), 'semdata' (sem data), 'divergencia' (interpretação/condição), 'limite' (limitação do LeãoHub)
   const PENDENCIAS = [
@@ -979,7 +676,7 @@
     { coluna: 'divergencia', titulo: 'Veterinários: 30% ou 60%?', situacao: 'Hoje estão na lista de profissões com 30%.', falta: 'Há projeto no Senado para passá-los para a lista da saúde (60%).', quando: 'Depende do projeto', sistema: 'Usa 30%.', param: false, fonte: { nome: 'Senado Federal', url: 'https://legis.senado.leg.br/sdleg-getter/documento?dm=9958173' } },
     { coluna: 'divergencia', titulo: 'Reduções com condições', situacao: 'Segurança da informação, atividades desportivas, produções culturais e profissões do art. 127 têm redução só se cumprirem condições (ex.: sócios habilitados no conselho, sem empresa como sócia).', falta: 'Conferir as condições de cada cliente.', quando: 'Caso a caso', sistema: 'Mostra a redução com o aviso "confirmar com o contador".', param: false, fonte: { nome: 'CRC-MG', url: 'https://crcmg.org.br/wp-content/uploads/2025/07/ApresentacaoReformaTributariaDanielCardosoProfissionaisContabeis.pdf' } },
     { coluna: 'divergencia', titulo: 'Dividendos: "15% sobre qualquer valor"', situacao: 'Citado na reunião, mas não há lei aprovada com essa regra. A regra em vigor é 10% sobre o total acima de R$ 50 mil/mês (Lei 15.270/2025).', falta: 'Confirmar com a contabilidade de onde veio o número (o 15% na fonte que existe é do JCP).', quando: '—', sistema: 'Mostra 15% só como "cenário hipotético".', param: true, fonte: { nome: 'Tributário nos Bastidores', url: 'https://tributarionosbastidores.com.br/2026/10/trf4-questiona-retencao-de-10-sobre-lucros-e-dividendos-acima-de-50-000/amp/' } },
-    { coluna: 'limite', titulo: 'Dados só no navegador', situacao: 'Clientes e lançamentos ficam salvos só no computador de quem usa.', falta: 'Login e banco de dados para virar produto.', quando: 'Próxima etapa', sistema: 'Use Exportar/Importar em Parâmetros para não perder dados.', param: true, fonte: null },
+    { coluna: 'limite', titulo: 'Parâmetros salvos só no navegador', situacao: 'Se você mudar as alíquotas em Parâmetros, a mudança vale só neste navegador e computador.', falta: 'Login e banco de dados para virar produto.', quando: 'Próxima etapa', sistema: 'Em outro computador, ajuste os Parâmetros de novo (ou use "Restaurar padrão").', param: true, fonte: null },
     { coluna: 'limite', titulo: 'Transição 2029–2032 não calculada', situacao: 'O sistema compara hoje x 2027–2028 e hoje x 2033.', falta: 'Calcular a troca gradual de ICMS/ISS por IBS ano a ano.', quando: 'Próxima etapa', sistema: '—', param: false, fonte: null },
     { coluna: 'limite', titulo: 'Crédito de fornecedor com redução', situacao: 'O crédito das compras usa a alíquota cheia.', falta: 'Permitir informar a redução do setor de cada fornecedor (o crédito é o imposto que ele cobrou).', quando: 'Próxima etapa', sistema: 'Pode superestimar o crédito quando o fornecedor tem redução.', param: false, fonte: null },
     { coluna: 'limite', titulo: 'IBS por cidade', situacao: 'O sistema usa uma alíquota única de IBS.', falta: 'Estados e municípios podem fixar alíquotas próprias.', quando: 'Quando as alíquotas locais saírem', sistema: 'Ajuste o IBS em Parâmetros para a cidade do cliente.', param: true, fonte: null },
@@ -1022,7 +719,7 @@
     const p = db.params;
     const campo = (nome, rot, extra) => `<div><label>${rot}</label><input name="${nome}" type="number" step="0.01" value="${esc(p[nome])}" ${extra || ''}></div>`;
     $app.innerHTML = `
-      <header class="page-head"><div><h1>Parâmetros e dados</h1><p class="muted">Alíquotas usadas no simulador e backup dos dados.</p></div></header>
+      <header class="page-head"><div><h1>Parâmetros</h1><p class="muted">Alíquotas usadas no simulador, nos cenários e na aba de tipos de serviço. Ficam salvas neste navegador.</p></div></header>
       <form class="card" id="form-params">
         <h2>Alíquotas de referência</h2>
         <div class="fields">
@@ -1048,18 +745,7 @@
         <div class="note">As alíquotas ainda não são definitivas. A lei prevê um teto de 26,5% para CBS + IBS, mas ele não é automático: se a estimativa passar disso, o governo precisa propor medidas de redução ao Congresso.</div>
         <div class="note info">Reduções por setor usadas no simulador: ${Object.values(SETORES).map((s) => `${esc(s.nome)} ${s.reducao}%`).join(' · ')}.</div>
         <div class="form-foot"><button class="btn" type="submit">Salvar parâmetros</button><button class="btn secondary" type="button" data-action="restaurarParams">Restaurar padrão</button></div>
-      </form>
-      <section class="card">
-        <h2>Backup</h2>
-        <p class="muted">No protótipo os dados ficam só neste navegador. Exporte para não perder.</p>
-        <div class="actions">
-          <button class="btn" data-action="exportar">Exportar dados (.json)</button>
-          <button class="btn secondary" data-action="copiarBackup">Copiar backup</button>
-          <label class="btn secondary" style="margin:0">Importar .json<input id="importar" type="file" accept="application/json" hidden></label>
-          <button class="btn secondary" data-action="resetDemo" data-confirm="Substituir todos os dados pelos dados de exemplo?">Recarregar dados de exemplo</button>
-          <button class="btn danger" data-action="limparTudo" data-confirm="Apagar todos os clientes e lançamentos?">Apagar tudo</button>
-        </div>
-      </section>`;
+      </form>`;
     document.getElementById('form-params').addEventListener('submit', (e) => {
       e.preventDefault();
       const f = new FormData(e.target);
@@ -1068,47 +754,20 @@
       salvar();
       toast('Parâmetros salvos.');
     });
-    document.getElementById('importar').addEventListener('change', (e) => {
-      const arq = e.target.files[0];
-      if (!arq) return;
-      const leitor = new FileReader();
-      leitor.onload = () => {
-        try { db = normalizar(JSON.parse(leitor.result)); salvar(); toast('Dados importados.'); render(); } catch (err) { toast('Arquivo inválido.'); }
-      };
-      leitor.readAsText(arq);
-    });
-  }
-
-  function naoEncontrado() {
-    $app.innerHTML = '<section class="card"><h2>Não encontrado</h2><p>Esse registro não existe mais. <a href="#/">Voltar ao painel</a></p></section>';
   }
 
   // ---------------------------------------------------------------- ações
   const acoes = {
-    conferir(id) { const l = db.lancamentos.find((x) => x.id === id); if (l) { l.status = 'conferido'; salvar(); render(); } },
-    excluirLanc(id) { db.lancamentos = db.lancamentos.filter((x) => x.id !== id); salvar(); render(); },
-    excluirCliente(id) {
-      db.clientes = db.clientes.filter((c) => c.id !== id);
-      db.lancamentos = db.lancamentos.filter((l) => l.clienteId !== id);
-      salvar(); location.hash = '#/clientes';
-    },
     copiarSimulacao() { const t = textoSimulacao(); if (t) copiar(t); },
     restaurarParams() { db.params = Object.assign({}, PARAMS_PADRAO); salvar(); toast('Parâmetros restaurados.'); render(); },
     consultarCnpj(prefixo) { consultarCnpj(prefixo); },
-    copiarBackup() { copiar(JSON.stringify(db, null, 2)); },
-    exportar() { baixar(`leaohub-backup-${hojeISO()}.json`, JSON.stringify(db, null, 2), 'application/json'); },
-    resetDemo() { db = dadosDemo(); salvar(); toast('Dados de exemplo carregados.'); location.hash = '#/clientes'; render(); },
-    limparTudo() {
-      db = normalizar({ params: db.params }); salvar(); toast('Dados apagados.'); location.hash = '#/clientes'; render();
-    },
   };
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || !acoes[el.dataset.action]) return;
     e.preventDefault();
-    const executar = () => acoes[el.dataset.action](el.dataset.id, el, e);
-    if (el.dataset.confirm) confirmar(el.dataset.confirm, executar); else executar();
+    acoes[el.dataset.action](el.dataset.id, el, e);
   });
 
   // Enter no campo de CNPJ consulta, em vez de enviar o formulário.
@@ -1123,22 +782,15 @@
   }
 
   function render() {
-    const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
+    const [a, b] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     marcarNav(a || 'simulador');
     try {
       switch (a) {
         case undefined: viewSimulador(); break;
-        case 'clientes':
-          if (!b) viewClientes();
-          else if (b === 'novo') viewClienteForm();
-          else if (c === 'editar') viewClienteForm(b);
-          else viewCliente(b);
-          break;
         case 'simulador': viewSimulador(b); break;
         case 'cenarios': viewCenarios(); break;
         case 'servicos': viewServicos(); break;
         case 'pendencias': viewPendencias(); break;
-        case 'portal': if (b) viewPortal(b); else viewPortalEscolha(); break;
         case 'config': viewConfig(); break;
         default: viewSimulador();
       }

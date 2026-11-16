@@ -2,35 +2,24 @@
 
 Sistema para escritórios de contabilidade, focado na transição da **reforma tributária** (CBS/IBS).
 
-> **Status:** protótipo para validar a ideia. Roda direto no navegador, sem servidor. Os dados ficam salvos no próprio navegador (localStorage).
+> **Status:** protótipo para validar a ideia. Roda direto no navegador, sem servidor. Só os parâmetros (alíquotas) ficam salvos no próprio navegador (localStorage).
 
 ## Módulos
-
-O menu é dividido em três grupos.
 
 **Reforma tributária**
 
 | Aba | O que faz |
 |---|---|
 | **Simulador da reforma** (página inicial) | Compara PIS/COFINS (+ ISS) de hoje com CBS (2027–2028) ou CBS + IBS (2033): redução por atividade, créditos, folha sem crédito, crédito acumulado, split payment e dividendos. Copia um resumo pronto para mandar ao cliente. |
-| **Cenários PF x PJ** | Situações práticas lado a lado: de quem comprar (PF, MEI, Simples, empresa fora do Simples), lançar despesa no CPF ou no CNPJ, vender para PF ou PJ, pagar parceiro como PF ou PJ, funcionário CLT x PJ e retirada de lucro. Inclui consulta de CNPJ (Simples/MEI). |
+| **Cenários PF x PJ** | Situações práticas lado a lado: de quem comprar (PF, MEI, Simples, empresa fora do Simples), lançar despesa no CPF ou no CNPJ, vender para PF ou PJ, pagar parceiro como PF ou PJ, funcionário CLT x PJ e retirada de lucro. Inclui consulta de CNPJ (Simples/MEI) com dados públicos da Receita (BrasilAPI, com CNPJá como reserva). |
 | **Tipos de serviço** | Guia pesquisável com dezenas de serviços e o enquadramento de cada um: alíquota cheia, redução de 30%, 40%, 60% ou regime próprio, com base legal e atalho para simular. |
 | **O que ainda não está definido** | Quadro com as regras que ainda podem mudar (com prazo, sem data, interpretação/condições) e as limitações do sistema, dizendo como o LeãoHub trata cada uma e onde atualizar. |
-
-**Escritório**
-
-| Aba | O que faz |
-|---|---|
-| **Clientes** | Cadastro das empresas atendidas (regime, tipo de atividade, faturamento), com busca de dados pelo CNPJ e estimativa da reforma com os lançamentos do mês. |
-| **Portal do cliente** | O cliente envia notas e despesas (com consulta do CNPJ do fornecedor) e vê uma estimativa mensal de CBS e créditos. O escritório confere cada envio. |
 
 **Configuração**
 
 | Aba | O que faz |
 |---|---|
-| **Parâmetros e dados** | Alíquotas de referência editáveis, além de backup (exportar e importar JSON). |
-
-A consulta de CNPJ usa dados públicos da Receita (BrasilAPI, com CNPJá como reserva). A busca pelo nome da empresa não existe em APIs gratuitas.
+| **Parâmetros** | Alíquotas de referência editáveis. Ficam salvas no navegador de quem usa. |
 
 ## Como rodar
 
@@ -68,9 +57,6 @@ Valores padrão, todos editáveis em **Parâmetros** (revisados em novembro de 2
 
 ## Próximos passos (rumo ao produto)
 
-- [ ] Backend com login por escritório (multiempresa) e acesso separado para o cliente
-- [ ] Banco de dados (ex.: Supabase/PostgreSQL) no lugar do localStorage
-- [ ] Upload real de notas (PDF/XML) e leitura automática do XML da NF-e
+- [ ] Login por escritório e banco de dados (ex.: Supabase/PostgreSQL)
 - [ ] Fase de transição da reforma ano a ano (2026–2033)
-- [ ] Alertas de prazos e obrigações por cliente
 - [ ] Planos e cobrança para os escritórios

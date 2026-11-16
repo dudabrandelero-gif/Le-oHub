@@ -43,10 +43,6 @@ main { padding: 28px 32px 60px; max-width: 1200px; width: 100%; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 18px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .grid-2 > .card { margin-bottom: 0; }
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
-.stat b { display: block; font-size: 1.6rem; }
-.stat span { color: var(--muted); font-size: 0.85rem; }
 
 .btn { display: inline-block; background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
 .btn:hover { filter: brightness(1.08); }
@@ -88,14 +84,7 @@ textarea { min-height: 80px; resize: vertical; }
 .note { background: var(--warn-soft); color: #7a3e06; border-radius: 8px; padding: 10px 12px; font-size: 0.85rem; margin-top: 12px; }
 .note.info { background: var(--accent-soft); color: #0b4f49; }
 
-.client-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
-.client-card { display: block; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; text-decoration: none; color: var(--text); }
-.client-card:hover { border-color: var(--accent); }
 
-.ata h3 { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-.ata ul, .ata ol { padding-left: 20px; margin: 6px 0; }
-.tarefa-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; margin-bottom: 8px; }
-.done { text-decoration: line-through; color: var(--muted); }
 
 .toast { position: fixed; bottom: 20px; right: 20px; background: #0d1b2a; color: #fff; padding: 10px 16px; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.2); z-index: 10; }
 
@@ -107,14 +96,9 @@ textarea { min-height: 80px; resize: vertical; }
   .sidebar-note { display: none; }
   main { padding: 18px 16px 40px; }
   .grid-2, .sim, .result-grid { grid-template-columns: 1fr; }
-  .stats { grid-template-columns: repeat(2, 1fr); }
-  form .fields { grid-template-columns: 1fr; }
-  .tarefa-row { grid-template-columns: 1fr; }
-}
+    form .fields { grid-template-columns: 1fr; }
+  }
 
-.modal-bg { position: fixed; inset: 0; background: rgba(13,27,42,.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
-.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
-.modal p { margin-top: 0; }
 
 .cnpj-box { display: flex; gap: 8px; }
 .cnpj-box input { flex: 1; }
