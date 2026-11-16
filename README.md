@@ -1,62 +1,88 @@
 # LeãoHub
 
-Sistema para escritórios de contabilidade, focado na transição da **reforma tributária** (CBS/IBS).
+Simulador da reforma tributária (CBS/IBS) vendido por assinatura para empresas.
 
-> **Status:** protótipo para validar a ideia. Roda direto no navegador, sem servidor. Só os parâmetros (alíquotas) ficam salvos no próprio navegador (localStorage).
+- **Site de vendas:** `index.html`, com proposta, recursos, planos e dúvidas.
+- **App:** `app.html`, com login, minhas empresas, simulador, cenários, relatório em PDF e conta.
 
-## Módulos
+> **Status:** versão 1. Funciona em **modo demonstração** (dados no navegador, sem senha) até você ligar o Supabase. A cobrança online ainda não está conectada.
 
-**Reforma tributária**
+## O que o assinante tem
 
-| Aba | O que faz |
+| Área | O que faz |
 |---|---|
-| **Simulador da reforma** (página inicial) | Compara PIS/COFINS (+ ISS) de hoje com CBS (2027–2028) ou CBS + IBS (2033): redução por atividade, créditos, folha sem crédito, crédito acumulado, split payment e dividendos. Copia um resumo pronto para mandar ao cliente. |
-| **Cenários PF x PJ** | Situações práticas lado a lado: de quem comprar (PF, MEI, Simples, empresa fora do Simples), lançar despesa no CPF ou no CNPJ, vender para PF ou PJ, pagar parceiro como PF ou PJ, funcionário CLT x PJ e retirada de lucro. Inclui consulta de CNPJ (Simples/MEI) com dados públicos da Receita (BrasilAPI, com CNPJá como reserva). |
-| **Tipos de serviço** | Guia pesquisável com dezenas de serviços e o enquadramento de cada um: alíquota cheia, redução de 30%, 40%, 60% ou regime próprio, com base legal e atalho para simular. |
-| **O que ainda não está definido** | Quadro com as regras que ainda podem mudar (com prazo, sem data, interpretação/condições) e as limitações do sistema, dizendo como o LeãoHub trata cada uma e onde atualizar. |
+| **Entrar / teste grátis** | Cadastro com e-mail e senha, teste grátis de 14 dias com recursos do plano Profissional, recuperação de senha. |
+| **Minhas empresas** | Cadastro de empresas (busca nome e Simples pelo CNPJ), com limite por plano e histórico de simulações. |
+| **Simulador da reforma** | Hoje x CBS (2027–2028) ou x CBS + IBS (2033): redução por atividade, créditos, folha, crédito acumulado, split payment e dividendos. Salva no histórico da empresa. |
+| **Relatório (PDF)** | Relatório da simulação pronto para imprimir ou salvar em PDF. Nos planos Profissional e Grupo, sai com o logo, o nome e a cor do assinante. |
+| **Cenários PF x PJ** | De quem comprar, CPF x CNPJ, vender para PF ou PJ, parceiro PF ou PJ, CLT x PJ, retirada de lucro. Consulta de CNPJ (Simples/MEI). |
+| **Tipos de serviço** | Guia pesquisável com o enquadramento de cada serviço na reforma (cheia, 30%, 40%, 60%, regime próprio). |
+| **O que ainda não está definido** | Quadro com as regras que ainda podem mudar e as limitações do sistema. |
+| **Minha conta e plano** | Plano atual, dias de teste, plano de interesse, logo, nome e cor da marca. |
+| **Parâmetros** | Alíquotas de referência editáveis. |
 
-**Configuração**
+## Planos
 
-| Aba | O que faz |
-|---|---|
-| **Parâmetros** | Alíquotas de referência editáveis. Ficam salvas no navegador de quem usa. |
+Preços, limites e textos ficam em **`config.js`** e aparecem automaticamente no site e no app.
 
-## Como rodar
+| Plano | Preço sugerido | Empresas | Relatório com marca própria |
+|---|---|---|---|
+| Essencial | R$ 39/mês | 1 | não |
+| Profissional | R$ 79/mês | 5 | sim |
+| Grupo | R$ 149/mês | 20 | sim |
 
-Abra o `index.html` no navegador. Não precisa instalar nada.
+Se mudar o número de empresas de um plano, ajuste também a função `limite_empresas` em `supabase/schema.sql` e rode o arquivo de novo.
 
-### Publicar no GitHub Pages
-1. No repositório, abra **Settings → Pages**.
-2. Em *Source*, escolha **Deploy from a branch**, depois a branch `main` e a pasta `/ (root)`.
-3. O sistema fica disponível em `https://SEU-USUARIO.github.io/NOME-DO-REPO/`.
+## Como ligar o login de verdade (Supabase, gratuito)
+
+1. Crie uma conta em **supabase.com** e clique em **New project**. Escolha um nome, uma senha do banco e a região **South America (São Paulo)**.
+2. No projeto, abra **SQL Editor → New query**, cole todo o conteúdo de `supabase/schema.sql` e clique em **Run**.
+3. Abra **Authentication → URL Configuration**:
+   - **Site URL:** `https://dudabrandelero-gif.github.io/Le-oHub/app.html`
+   - **Redirect URLs:** adicione a mesma URL.
+4. Abra **Project Settings → API** e copie a **Project URL** e a **anon public key**.
+5. Cole as duas em `config.js`, nos campos `SUPABASE_URL` e `SUPABASE_ANON_KEY`, e publique.
+
+Pronto: o aviso de "modo demonstração" some, o cadastro passa a pedir senha e cada conta só enxerga os próprios dados. A segurança é garantida pelo próprio banco (Row Level Security).
+
+**Liberar um plano pago para um cliente** (enquanto a cobrança não está ligada): no Supabase, abra **Table Editor → contas** e mude a coluna `plano` de `teste` para `essencial`, `profissional` ou `grupo`.
+
+> A chave "anon public" pode ficar no código: ela é pública por design. Nunca coloque a chave **service_role** no `config.js`.
 
 ## Estrutura
 
 ```
-index.html                 # layout e menu
-styles.css                 # visual
-app.js                     # telas, rotas, dados e cálculos
-tools/build_preview.py     # gera dist/preview.html (arquivo único) para demonstração
+index.html            # site de vendas
+site.css              # visual do site de vendas
+app.html              # app (login + menu)
+styles.css            # visual do app (inclui o layout de impressão do relatório)
+config.js             # chaves do Supabase, planos, dias de teste, contato de vendas
+store.js              # dados: modo demonstração (navegador) ou Supabase
+app.js                # telas, cálculos e rotas
+supabase/schema.sql   # tabelas, segurança por conta, limite de empresas por plano
+tools/build_preview.py  # gera dist/app-preview.html (arquivo único) para demonstração
 ```
 
-## Premissas do simulador
+## Premissas tributárias
 
 Valores padrão, todos editáveis em **Parâmetros** (revisados em novembro de 2026):
 
 - **CBS 2027–2028: 11,3%.** É a alíquota de referência calculada pelo TCU em 28/10/2026; o Senado fixa até 15/12/2026. Em 2027 e 2028 a cobrança é de 11,2% de CBS + 0,1% de IBS de teste.
-- **Regime completo (2033): CBS 9,21% + IBS 18,70% = 27,91%.** É a estimativa do Comitê Gestor do IBS (Resolução CGIBS nº 14/2026), ainda não definitiva. A lei prevê um teto de 26,5%, mas ele não é automático: se a estimativa passar disso, o governo precisa propor medidas de redução.
-- Redução por tipo de atividade: saúde (Anexo III) e educação regular (Anexo II) 60%; profissões regulamentadas da lista do art. 127 30%; bares, restaurantes, hotelaria, parques e turismo 40% (regime específico); prestadores de serviços em geral, software/SaaS, cursos online/comunidades/infoprodutos e comércio 0% (alíquota cheia).
-- Cursos livres: há interpretações diferentes sobre a redução da educação, por isso o sistema assume alíquota cheia e recomenda confirmar com o contador.
-- PIS/COFINS (vigentes até dez/2026): 3,65% cumulativo (Presumido) e 9,25% não cumulativo (Real).
-- Crédito sobre compras: alíquota cheia para fornecedor fora do Simples, desde que ele pague o imposto (art. 47). Fornecedor do Simples: crédito só do CBS/IBS pago no DAS, informado na nota (padrão 0%, conservador), a menos que ele pague CBS/IBS "por fora". Folha: não gera crédito.
-- Split payment: começa em 2027 de forma opcional e só entre empresas; a obrigatoriedade ainda não tem data.
-- Dividendos (Lei 15.270/2025, em vigor desde jan/2026): retenção de 10% sobre o valor total quando a mesma empresa paga mais de R$ 50 mil no mês ao mesmo sócio, além do imposto mínimo anual (IRPFM) para renda acima de R$ 600 mil. O "cenário de 15%" é só uma comparação hipotética: não há lei aprovada.
-- Cálculo mensal; os anos intermediários da transição (2029–2032) não são calculados.
+- **Regime completo (2033): CBS 9,21% + IBS 18,70% = 27,91%.** É a estimativa do Comitê Gestor do IBS (Resolução CGIBS nº 14/2026), ainda não definitiva. A lei prevê um teto de 26,5%, mas ele não é automático.
+- **Reduções por atividade:**
+  - 60%: saúde (Anexo III) e educação regular (Anexo II);
+  - 30%: profissões regulamentadas do art. 127;
+  - 40%: bares, restaurantes, hotelaria, parques e turismo (regime específico);
+  - alíquota cheia: serviços em geral, software/SaaS, cursos online e comércio.
+- **Crédito:** alíquota cheia para fornecedor fora do Simples (art. 47). Fornecedor do Simples: só o CBS/IBS pago no DAS (padrão 0%, conservador). Folha não gera crédito.
+- **Split payment:** começa em 2027 de forma opcional, só entre empresas; a obrigatoriedade ainda não tem data.
+- **Dividendos (Lei 15.270/2025):** retenção de 10% sobre o total quando a mesma empresa paga mais de R$ 50 mil no mês ao mesmo sócio, mais o IRPFM anual acima de R$ 600 mil.
 
-> As estimativas não substituem a análise do contador.
+> As estimativas não substituem a análise de um contador.
 
-## Próximos passos (rumo ao produto)
+## Próximos passos
 
-- [ ] Login por escritório e banco de dados (ex.: Supabase/PostgreSQL)
-- [ ] Fase de transição da reforma ano a ano (2026–2033)
-- [ ] Planos e cobrança para os escritórios
+- [ ] Ligar a cobrança recorrente (ex.: Asaas ou Mercado Pago), com troca automática de plano
+- [ ] Guardar as alíquotas oficiais no servidor (hoje ficam no navegador de cada usuário)
+- [ ] Fase de transição da reforma ano a ano (2029–2032)
+- [ ] Domínio próprio (ex.: leaohub.com.br)

@@ -124,3 +124,62 @@ tr.marcada td { background: var(--accent-soft); }
 .pend p { margin: 4px 0; }
 @media (max-width: 1100px) { .quadro { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px) { .quadro { grid-template-columns: 1fr; } #nav .nav-grupo { width: 100%; padding: 6px 4px 0; } }
+
+/* ---------- app vendável: login, conta, relatório ---------- */
+.brand a { color: #fff; text-decoration: none; }
+.sidebar { display: flex; flex-direction: column; }
+.usuario-box { margin-top: auto; padding: 14px 10px 0; border-top: 1px solid rgba(255,255,255,.1); font-size: 0.85rem; }
+.usuario-box:empty { display: none; }
+.usuario-nome { color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.usuario-plano { color: #8ea0b4; margin-bottom: 4px; }
+.usuario-box .link-btn { color: #9fd8d1; }
+.aviso-demo { background: var(--warn-soft); color: #7a3e06; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; margin-bottom: 16px; }
+
+body.sem-menu .layout { grid-template-columns: 1fr; }
+body.sem-menu .sidebar { display: none; }
+body.sem-menu main { max-width: none; }
+.auth { max-width: 420px; margin: 6vh auto 0; }
+.auth-card h1 { margin-bottom: 14px; }
+.auth-marca { font-weight: 800; color: var(--accent); font-size: 1.1rem; margin-bottom: 6px; }
+
+.acoes-linha { white-space: nowrap; }
+.acoes-linha .btn { margin-left: 4px; }
+
+.planos-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+.plano-mini { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; cursor: pointer; font-weight: 400; }
+.plano-mini input { width: auto; margin-right: 6px; }
+.plano-mini span { display: block; color: var(--muted); font-size: 0.82rem; margin-top: 4px; }
+.plano-mini.sel { border-color: var(--accent); background: var(--accent-soft); }
+.logo-previa { max-height: 60px; max-width: 240px; vertical-align: middle; border: 1px solid var(--line); border-radius: 6px; padding: 4px; background: #fff; }
+
+.modal-bg { position: fixed; inset: 0; background: rgba(13,27,42,.45); display: flex; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+.modal { background: var(--surface); border-radius: var(--radius); padding: 20px; max-width: 420px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.modal p { margin-top: 0; }
+
+.relatorio-acoes { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+.relatorio { --marca: #0f766e; max-width: 820px; padding: 28px 32px; }
+.rel-topo { display: flex; align-items: center; gap: 18px; border-bottom: 3px solid var(--marca); padding-bottom: 14px; margin-bottom: 16px; }
+.rel-logo { max-height: 56px; max-width: 200px; }
+.rel-nome-marca { font-weight: 800; font-size: 1.3rem; color: var(--marca); }
+.rel-titulo h1 { font-size: 1.3rem; margin: 0; }
+.rel-titulo p { margin: 2px 0 0; color: var(--muted); }
+.relatorio h3 { color: var(--marca); }
+.rel-premissas td:first-child { color: var(--muted); width: 45%; }
+.relatorio .rel-destaque { border-color: var(--marca); border-width: 2px; }
+.rel-rodape { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 0.8rem; }
+
+@media (max-width: 900px) {
+  .planos-mini { grid-template-columns: 1fr; }
+  .usuario-box { margin-top: 8px; }
+  .relatorio { padding: 18px; }
+}
+
+@media print {
+  .sidebar, .no-print, .toast, .aviso-demo { display: none !important; }
+  .layout { display: block; }
+  main { padding: 0; max-width: none; }
+  body { background: #fff; }
+  .relatorio { border: none; box-shadow: none; max-width: none; padding: 0; }
+  .relatorio .result { break-inside: avoid; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LeãoHub — Simulador da reforma tributária</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand"><a href="index.html">LeãoHub</a><span>reforma tributária</span></div>
+    <nav id="nav">
+      <div class="nav-grupo">Reforma tributária</div>
+      <a href="#/simulador" data-route="simulador">Simulador da reforma</a>
+      <a href="#/cenarios" data-route="cenarios">Cenários PF x PJ</a>
+      <a href="#/servicos" data-route="servicos">Tipos de serviço</a>
+      <a href="#/pendencias" data-route="pendencias">O que ainda não está definido</a>
+      <div class="nav-grupo">Minha empresa</div>
+      <a href="#/empresas" data-route="empresas">Minhas empresas</a>
+      <a href="#/conta" data-route="conta">Minha conta e plano</a>
+      <a href="#/config" data-route="config">Parâmetros</a>
+    </nav>
+    <div id="usuario-box" class="usuario-box"></div>
+  </aside>
+  <main>
+    <div id="aviso-demo" class="aviso-demo no-print" hidden></div>
+    <div id="app"></div>
+  </main>
+</div>
+<div id="toast" class="toast" hidden></div>
+<script src="config.js"></script>
+<script>
+  // Carrega a biblioteca do Supabase só quando as chaves estiverem configuradas.
+  if (window.LEAOHUB_CONFIG && LEAOHUB_CONFIG.SUPABASE_URL && LEAOHUB_CONFIG.SUPABASE_ANON_KEY) {
+    document.write('<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>');
+  }
+</script>
+<script src="store.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

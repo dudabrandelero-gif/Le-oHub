@@ -3,27 +3,149 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LeãoHub — Sistema para escritórios de contabilidade</title>
-<link rel="stylesheet" href="styles.css">
+<title>LeãoHub — Quanto a reforma tributária muda o imposto da sua empresa</title>
+<meta name="description" content="Simule em minutos o impacto da CBS e do IBS na sua empresa: imposto de hoje x 2027 e 2033, créditos, cenários PF x PJ e relatório em PDF com a sua marca.">
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<div class="layout">
-  <aside class="sidebar">
-    <div class="brand">LeãoHub<span>protótipo</span></div>
-    <nav id="nav">
-      <div class="nav-grupo">Reforma tributária</div>
-      <a href="#/simulador" data-route="simulador">Simulador da reforma</a>
-      <a href="#/cenarios" data-route="cenarios">Cenários PF x PJ</a>
-      <a href="#/servicos" data-route="servicos">Tipos de serviço</a>
-      <a href="#/pendencias" data-route="pendencias">O que ainda não está definido</a>
-      <div class="nav-grupo">Configuração</div>
-      <a href="#/config" data-route="config">Parâmetros</a>
+<header class="topo">
+  <div class="container topo-inner">
+    <a class="logo" href="index.html">Leão<span>Hub</span></a>
+    <nav class="menu">
+      <a href="#como-funciona">Como funciona</a>
+      <a href="#recursos">Recursos</a>
+      <a href="#planos">Planos</a>
+      <a href="#duvidas">Dúvidas</a>
     </nav>
-    <p class="sidebar-note">Protótipo: as alíquotas ficam salvas só neste navegador.</p>
-  </aside>
-  <main id="app"></main>
-</div>
-<div id="toast" class="toast" hidden></div>
-<script src="app.js"></script>
+    <div class="topo-acoes">
+      <a class="btn-link" href="app.html#/entrar">Entrar</a>
+      <a class="btn" href="app.html#/cadastro">Testar grátis</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <p class="selo">Reforma tributária · CBS a partir de janeiro de 2027</p>
+        <h1>Descubra quanto a reforma tributária muda o imposto da <em>sua</em> empresa</h1>
+        <p class="lead">Em poucos minutos você vê quanto paga hoje, quanto vai pagar com a CBS e o IBS, quanto pode recuperar em créditos e o que muda no seu caixa. Sem planilha e sem termo técnico.</p>
+        <div class="hero-acoes">
+          <a class="btn grande" href="app.html#/cadastro">Começar teste grátis de <span class="dias-teste">14</span> dias</a>
+          <span class="nota">Sem cartão de crédito</span>
+        </div>
+      </div>
+      <div class="hero-card" aria-label="Exemplo de resultado do simulador">
+        <div class="hc-topo"><span>Exemplo · clínica odontológica</span><span class="hc-tag">2027</span></div>
+        <div class="hc-linha"><span>Receita do mês</span><b>R$ 45.000</b></div>
+        <div class="hc-linha"><span>PIS/COFINS hoje</span><b>R$ 1.642,50</b></div>
+        <div class="hc-linha"><span>CBS com redução da saúde (60%)</span><b>R$ 2.034,00</b></div>
+        <div class="hc-linha credito"><span>(−) Crédito sobre R$ 10 mil em compras</span><b>−R$ 1.130,00</b></div>
+        <div class="hc-total"><span>A pagar com a reforma</span><b>R$ 904,00</b></div>
+        <p class="hc-nota">Comprar de fornecedores fora do Simples virou economia. O LeãoHub mostra onde.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="faixa">
+    <div class="container faixa-grid">
+      <div><b>2027</b><span>CBS substitui PIS e COFINS</span></div>
+      <div><b>2027</b><span>Split payment começa, opcional: imposto separado no pagamento</span></div>
+      <div><b>2029–2032</b><span>ICMS e ISS diminuem aos poucos</span></div>
+      <div><b>2033</b><span>IBS substitui ICMS e ISS por completo</span></div>
+    </div>
+  </section>
+
+  <section id="como-funciona" class="secao">
+    <div class="container">
+      <h2>Como funciona</h2>
+      <div class="passos">
+        <div class="passo"><span class="num">1</span><h3>Cadastre sua empresa</h3><p>Digite o CNPJ: buscamos o nome na Receita Federal e mostramos se a empresa é do Simples. Escolha a atividade e veja se ela tem redução.</p></div>
+        <div class="passo"><span class="num">2</span><h3>Simule o mês</h3><p>Informe receita, compras e folha. O LeãoHub compara o imposto de hoje com 2027 e com 2033, já com os créditos e o efeito no caixa.</p></div>
+        <div class="passo"><span class="num">3</span><h3>Decida e compartilhe</h3><p>Salve o histórico, compare cenários (comprar no CPF ou no CNPJ, contratar PF ou PJ) e gere um relatório em PDF para levar ao contador.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="recursos" class="secao clara">
+    <div class="container">
+      <h2>Tudo o que muda, num lugar só</h2>
+      <div class="recursos">
+        <div class="recurso"><h3>Simulador 2027 e 2033</h3><p>Imposto de hoje x CBS (2027) e x CBS + IBS (2033), com a redução da sua atividade e os créditos das compras.</p></div>
+        <div class="recurso"><h3>Cenários PF x PJ</h3><p>De quem comprar, lançar despesa no CPF ou no CNPJ, vender para pessoa física ou empresa, pagar parceiro como PF ou PJ.</p></div>
+        <div class="recurso"><h3>Consulta de CNPJ</h3><p>Descubra se o fornecedor é do Simples ou MEI antes de comprar, porque isso muda o crédito que você recupera.</p></div>
+        <div class="recurso"><h3>Guia de tipos de serviço</h3><p>Saúde, educação, profissões regulamentadas, tecnologia, restaurantes e mais: veja em qual faixa da reforma cada um se encaixa.</p></div>
+        <div class="recurso"><h3>O que ainda não está definido</h3><p>Um quadro atualizado com o que ainda depende do governo, como alíquotas e prazos, e como isso afeta as contas.</p></div>
+        <div class="recurso"><h3>Relatório com a sua marca</h3><p>PDF da simulação com o seu logo e as suas cores, pronto para enviar ao sócio, ao contador ou ao banco.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="secao">
+    <div class="container">
+      <h2>Feito para quem precisa decidir agora</h2>
+      <div class="publico">
+        <span>Clínicas e consultórios</span><span>Agências e prestadores de serviço</span><span>Empresas de software e SaaS</span>
+        <span>Cursos e negócios digitais</span><span>Comércio</span><span>Restaurantes e hotelaria</span><span>Grupos com vários CNPJs</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="planos" class="secao clara">
+    <div class="container">
+      <h2>Planos</h2>
+      <p class="sub">Teste grátis por <span class="dias-teste">14</span> dias com todos os recursos do Profissional. Sem cartão.</p>
+      <div id="lista-planos" class="planos"></div>
+    </div>
+  </section>
+
+  <section id="duvidas" class="secao">
+    <div class="container estreito">
+      <h2>Dúvidas frequentes</h2>
+      <details><summary>O LeãoHub substitui o meu contador?</summary><p>Não. Ele mostra estimativas para você planejar e conversar com o contador com números na mão. O enquadramento final de cada operação é decisão técnica do contador.</p></details>
+      <details><summary>As alíquotas já são definitivas?</summary><p>Ainda não. Usamos a CBS de 11,3% para 2027, calculada pelo TCU e pendente de fixação pelo Senado, e a estimativa oficial do Comitê Gestor do IBS para 2033. O quadro "O que ainda não está definido" mostra o que falta e é atualizado quando as regras saem.</p></details>
+      <details><summary>Minha empresa é do Simples Nacional. Serve para mim?</summary><p>Sim. Você vê quanto crédito seus clientes empresa recuperam e compara ficar no Simples com pagar CBS/IBS "por fora". Também consulta se seus fornecedores são do Simples.</p></details>
+      <details><summary>Meus dados ficam protegidos?</summary><p>Cada conta entra com e-mail e senha e só enxerga as próprias empresas e simulações.</p></details>
+      <details><summary>Como funciona o pagamento?</summary><p>Durante o teste grátis não pedimos cartão. No fim do teste você escolhe o plano para continuar e mantém suas empresas e simulações.</p></details>
+    </div>
+  </section>
+
+  <section class="cta-final">
+    <div class="container">
+      <h2>A CBS começa em janeiro. Saiba hoje quanto ela custa para você.</h2>
+      <a class="btn grande claro" href="app.html#/cadastro">Começar teste grátis</a>
+    </div>
+  </section>
+</main>
+
+<footer class="rodape">
+  <div class="container">
+    <p><b>LeãoHub</b> · Simulações para planejamento, que não substituem a análise de um contador.</p>
+    <p>Base legal: EC 132/2023, LC 214/2025, LC 227/2026 e Lei 15.270/2025. Alíquotas revisadas em novembro de 2026.</p>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script>
+  (function () {
+    var C = window.LEAOHUB_CONFIG || {};
+    var dias = C.DIAS_TESTE || 14;
+    document.querySelectorAll('.dias-teste').forEach(function (el) { el.textContent = dias; });
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); };
+    var brl = function (v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }); };
+    var alvo = document.getElementById("lista-planos");
+    alvo.innerHTML = (C.PLANOS || []).map(function (p) {
+      return '<div class="plano' + (p.destaque ? ' destaque' : '') + '">' +
+        (p.destaque ? '<span class="plano-selo">Mais escolhido</span>' : '') +
+        '<h3>' + esc(p.nome) + '</h3>' +
+        '<p class="preco"><b>' + brl(p.preco) + '</b><span>/mês</span></p>' +
+        '<p class="plano-resumo">' + esc(p.resumo) + '</p>' +
+        '<ul>' + (p.itens || []).map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>' +
+        '<a class="btn' + (p.destaque ? '' : ' contorno') + '" href="app.html#/cadastro/' + encodeURIComponent(p.id) + '">Testar grátis</a>' +
+      '</div>';
+    }).join('');
+  })();
+</script>
 </body>
 </html>

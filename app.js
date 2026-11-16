@@ -1,8 +1,9 @@
 /*
  * LeãoHub — protótipo de sistema para escritórios de contabilidade.
- * Módulos: simulador da reforma tributária (CBS/IBS), cenários PF x PJ, tipos de serviço
- * e quadro do que ainda não está definido.
- * Sem servidor: só os parâmetros (alíquotas) ficam salvos no localStorage do navegador.
+ * Módulos: login, minhas empresas, simulador da reforma (CBS/IBS) com histórico e relatório,
+ * cenários PF x PJ, tipos de serviço, quadro do que ainda não está definido e minha conta.
+ * Dados de conta, empresas e simulações: store.js (modo demonstração ou Supabase).
+ * Parâmetros (alíquotas): localStorage do navegador.
  */
 'use strict';
 (function () {
@@ -268,25 +269,51 @@
 
   // ---------------------------------------------------------------- telas
   // --- simulador
-  function viewSimulador(param) {
+  async function viewSimulador(param) {
+    const vez = renderVez;
     const p = db.params;
-    // '#/simulador/setor-xxx' abre o simulador já com o tipo de atividade escolhido (vem da aba de tipos de serviço).
-    const setorPedido = param && param.startsWith('setor-') ? param.slice(6) : null;
-    const ini = { receita: 50000, despReg: 20000, despSimples: 0, folha: 0, setor: SETORES[setorPedido] ? setorPedido : 'saude', regimeAtual: 'presumido', escopo: 'cbs', iss: p.issPadrao, creditoAnterior: 0, dividendos: 0 };
-    const campo = (nome, rot, val, extra) => `<div><label>${rot}</label><input name="${nome}" type="number" step="0.01" min="0" value="${val}" ${extra || ''}></div>`;
+    const empresas = await S.empresas.listar();
+    const ini = { receita: 50000, despReg: 20000, despSimples: 0, folha: 0, setor: 'saude', regimeAtual: 'presumido', escopo: 'cbs', iss: p.issPadrao, creditoAnterior: 0, dividendos: 0, empresaId: '', titulo: '' };
+    let origem = '';
+    // '#/simulador/setor-xxx' (da aba Tipos de serviço), 'empresa-<id>' (de Minhas empresas) ou 'sim-<id>' (simulação salva).
+    if (param && param.startsWith('setor-') && SETORES[param.slice(6)]) ini.setor = param.slice(6);
+    if (param && param.startsWith('empresa-')) {
+      const emp = empresas.find((e) => e.id === param.slice(8));
+      if (emp) {
+        Object.assign(ini, { empresaId: emp.id, setor: SETORES[emp.setor] ? emp.setor : ini.setor, regimeAtual: emp.regime === 'real' ? 'real' : 'presumido', receita: num(emp.faturamento) || ini.receita, despReg: 0 });
+        origem = 'Receita preenchida com o faturamento médio da empresa. Informe as compras e a folha do mês.';
+      }
+    }
+    if (param && param.startsWith('sim-')) {
+      const sim = await S.simulacoes.obter(param.slice(4));
+      if (sim && sim.dados && sim.dados.inp) {
+        Object.assign(ini, sim.dados.inp, { dividendos: sim.dados.dividendos || 0, empresaId: sim.empresa_id || '', titulo: sim.titulo || '' });
+        origem = `Simulação salva em ${dataBR(sim.criado_em)}, recalculada com as alíquotas atuais.`;
+      }
+    }
+    if (vez !== renderVez) return;
+    const campo = (nome, rot, val, extra) => `<div><label>${rot}</label><input name="${nome}" type="number" step="0.01" min="0" value="${esc(val)}" ${extra || ''}></div>`;
     $app.innerHTML = `
       <header class="page-head">
         <div><h1>Simulador da reforma tributária</h1><p class="muted">Compare o imposto de hoje com CBS/IBS, créditos e split payment.</p></div>
-        <div class="actions"><button class="btn secondary" data-action="copiarSimulacao">Copiar resumo</button></div>
+        <div class="actions">
+          <button class="btn secondary" data-action="copiarSimulacao">Copiar resumo</button>
+          <button class="btn secondary" data-action="relatorioAtual">Gerar relatório (PDF)</button>
+          <button class="btn" data-action="salvarSimulacao">Salvar simulação</button>
+        </div>
       </header>
       <div class="sim">
         <form class="card" id="form-sim">
           <div class="fields" style="grid-template-columns:1fr">
+            <div><label>Empresa</label><select name="empresaId"><option value="">Sem empresa (simulação livre)</option>${empresas.map((e) => `<option value="${e.id}" ${e.id === ini.empresaId ? 'selected' : ''}>${esc(e.nome)}</option>`).join('')}</select>
+              ${origem ? `<div class="muted small" style="margin-top:4px">${esc(origem)}</div>` : ''}
+              ${empresas.length ? '' : '<div class="muted small" style="margin-top:4px"><a href="#/empresas/nova">Cadastre sua empresa</a> para salvar o histórico.</div>'}</div>
+            <div><label>Nome da simulação <span class="hint">(opcional)</span></label><input name="titulo" value="${esc(ini.titulo)}" placeholder="Ex.: Novembro com novas compras"></div>
             <div><label>O que comparar</label><select name="escopo">
-              <option value="cbs" ${ini.escopo === 'cbs' ? 'selected' : ''}>2027–2028: PIS/COFINS → CBS (${pct(p.cbs)})</option>
-              <option value="cbs_ibs">2033 em diante: PIS/COFINS + ISS → CBS + IBS (${pct(p.cbs2033 + p.ibs)})</option></select></div>
+              <option value="cbs" ${ini.escopo !== 'cbs_ibs' ? 'selected' : ''}>2027–2028: PIS/COFINS → CBS (${pct(p.cbs)})</option>
+              <option value="cbs_ibs" ${ini.escopo === 'cbs_ibs' ? 'selected' : ''}>2033 em diante: PIS/COFINS + ISS → CBS + IBS (${pct(p.cbs2033 + p.ibs)})</option></select></div>
             <div><label>Regime atual</label><select name="regimeAtual">
-              <option value="presumido" ${ini.regimeAtual === 'presumido' ? 'selected' : ''}>Lucro Presumido (PIS/COFINS ${pct(p.pisCofinsCumulativo)})</option>
+              <option value="presumido" ${ini.regimeAtual !== 'real' ? 'selected' : ''}>Lucro Presumido (PIS/COFINS ${pct(p.pisCofinsCumulativo)})</option>
               <option value="real" ${ini.regimeAtual === 'real' ? 'selected' : ''}>Lucro Real (PIS/COFINS ${pct(p.pisCofinsNaoCumulativo)} com créditos)</option></select></div>
             <div><label>Tipo de atividade</label><select name="setor" data-setor>${opcoes(SETORES, ini.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select>${dicaSetor(ini.setor)}</div>
             ${campo('receita', 'Receita do mês (R$)', ini.receita)}
@@ -309,14 +336,20 @@
         folha: num(f.get('folha')), iss: num(f.get('iss')), creditoAnterior: num(f.get('creditoAnterior')),
       };
       const r = calcularReforma(inp, p);
-      const div = calcularDividendos(num(f.get('dividendos')), p);
-      viewSimulador.ultimo = { inp, r, div, dividendos: num(f.get('dividendos')), };
-      document.getElementById('sim-resultado').innerHTML = resultadoSimulacao(inp, r, div, num(f.get('dividendos')), p);
+      const dividendos = num(f.get('dividendos'));
+      const div = calcularDividendos(dividendos, p);
+      viewSimulador.ultimo = { inp, r, div, dividendos, empresaId: f.get('empresaId') || '', titulo: f.get('titulo').trim() };
+      document.getElementById('sim-resultado').innerHTML = resultadoSimulacao(inp, r, div, dividendos, p);
     };
     form.addEventListener('input', atualizar);
+    form.addEventListener('change', atualizar);
     form.addEventListener('submit', (e) => e.preventDefault());
     atualizar();
   }
+
+  // Resumo numérico guardado junto com a simulação (para listar sem recalcular).
+  const resumoResultado = (r) => ({ totalHoje: r.totalHoje, aPagar: r.aPagar, diferenca: r.diferenca, creditoProx: r.creditoProx, debito: r.debito, credito: r.credito, splitRetido: r.splitRetido });
+  const copiaParams = () => { const c = {}; ['cbs', 'cbs2033', 'ibs', 'pisCofinsCumulativo', 'pisCofinsNaoCumulativo', 'creditoSimples', 'divLimite', 'divAliqAtual', 'divBase', 'divAliqPL'].forEach((k) => { c[k] = db.params[k]; }); return c; };
 
   function resultadoSimulacao(inp, r, div, dividendos, p) {
     const hojeRot = r.comIbs ? 'PIS/COFINS + ISS hoje' : 'PIS/COFINS hoje';
@@ -366,7 +399,7 @@
     if (!s) return '';
     const { inp, r, div, dividendos } = s;
     const out = [
-      'Simulação da reforma tributária',
+      'Simulação da reforma tributária' + (s.titulo ? ' — ' + s.titulo : ''),
       `Receita do mês: ${brl(inp.receita)} | Compras com crédito: ${brl(inp.despReg)} | Compras do Simples: ${brl(inp.despSimples)} | Folha: ${brl(inp.folha)}`,
       `Hoje (${r.comIbs ? 'PIS/COFINS + ISS' : 'PIS/COFINS'}): ${brl(r.totalHoje)}`,
       `Reforma: débito ${brl(r.debito)} − créditos ${brl(r.credito)} = a pagar ${brl(r.aPagar)}`,
@@ -676,7 +709,8 @@
     { coluna: 'divergencia', titulo: 'Veterinários: 30% ou 60%?', situacao: 'Hoje estão na lista de profissões com 30%.', falta: 'Há projeto no Senado para passá-los para a lista da saúde (60%).', quando: 'Depende do projeto', sistema: 'Usa 30%.', param: false, fonte: { nome: 'Senado Federal', url: 'https://legis.senado.leg.br/sdleg-getter/documento?dm=9958173' } },
     { coluna: 'divergencia', titulo: 'Reduções com condições', situacao: 'Segurança da informação, atividades desportivas, produções culturais e profissões do art. 127 têm redução só se cumprirem condições (ex.: sócios habilitados no conselho, sem empresa como sócia).', falta: 'Conferir as condições de cada cliente.', quando: 'Caso a caso', sistema: 'Mostra a redução com o aviso "confirmar com o contador".', param: false, fonte: { nome: 'CRC-MG', url: 'https://crcmg.org.br/wp-content/uploads/2025/07/ApresentacaoReformaTributariaDanielCardosoProfissionaisContabeis.pdf' } },
     { coluna: 'divergencia', titulo: 'Dividendos: "15% sobre qualquer valor"', situacao: 'Citado na reunião, mas não há lei aprovada com essa regra. A regra em vigor é 10% sobre o total acima de R$ 50 mil/mês (Lei 15.270/2025).', falta: 'Confirmar com a contabilidade de onde veio o número (o 15% na fonte que existe é do JCP).', quando: '—', sistema: 'Mostra 15% só como "cenário hipotético".', param: true, fonte: { nome: 'Tributário nos Bastidores', url: 'https://tributarionosbastidores.com.br/2026/10/trf4-questiona-retencao-de-10-sobre-lucros-e-dividendos-acima-de-50-000/amp/' } },
-    { coluna: 'limite', titulo: 'Parâmetros salvos só no navegador', situacao: 'Se você mudar as alíquotas em Parâmetros, a mudança vale só neste navegador e computador.', falta: 'Login e banco de dados para virar produto.', quando: 'Próxima etapa', sistema: 'Em outro computador, ajuste os Parâmetros de novo (ou use "Restaurar padrão").', param: true, fonte: null },
+    { coluna: 'limite', titulo: 'Cobrança ainda não ligada', situacao: 'Os planos aparecem no site e no app, mas o pagamento online ainda não está conectado.', falta: 'Escolher a plataforma de cobrança (ex.: Asaas, Mercado Pago) e ligar a assinatura.', quando: 'Próxima etapa', sistema: 'Fim do teste mostra a tela "Assinar". O plano ativo é trocado manualmente no Supabase.', param: false, fonte: null },
+    { coluna: 'limite', titulo: 'Alíquotas iguais para todos ficam no navegador', situacao: 'Os Parâmetros (alíquotas) são salvos no navegador de cada usuário, não na conta.', falta: 'Guardar as alíquotas oficiais no servidor e atualizar todos de uma vez.', quando: 'Próxima etapa', sistema: 'Quando as alíquotas oficiais mudarem, uma nova versão do LeãoHub atualiza o padrão de todos os usuários.', param: true, fonte: null },
     { coluna: 'limite', titulo: 'Transição 2029–2032 não calculada', situacao: 'O sistema compara hoje x 2027–2028 e hoje x 2033.', falta: 'Calcular a troca gradual de ICMS/ISS por IBS ano a ano.', quando: 'Próxima etapa', sistema: '—', param: false, fonte: null },
     { coluna: 'limite', titulo: 'Crédito de fornecedor com redução', situacao: 'O crédito das compras usa a alíquota cheia.', falta: 'Permitir informar a redução do setor de cada fornecedor (o crédito é o imposto que ele cobrou).', quando: 'Próxima etapa', sistema: 'Pode superestimar o crédito quando o fornecedor tem redução.', param: false, fonte: null },
     { coluna: 'limite', titulo: 'IBS por cidade', situacao: 'O sistema usa uma alíquota única de IBS.', falta: 'Estados e municípios podem fixar alíquotas próprias.', quando: 'Quando as alíquotas locais saírem', sistema: 'Ajuste o IBS em Parâmetros para a cidade do cliente.', param: true, fonte: null },
@@ -712,6 +746,396 @@
         }).join('')}
       </div>
       <div class="note info">Quando um item for definido, basta atualizar o valor em Parâmetros. As estimativas não substituem a análise do contador.</div>`;
+  }
+
+  // ---------------------------------------------------------------- sessão e conta
+  let usuario = null;
+  let conta = null;
+  let renderVez = 0;
+  const S = window.LeaoStore;
+  const P = window.LeaoPlanos;
+  const CFG = window.LEAOHUB_CONFIG || {};
+  const corValida = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#0f766e');
+  const logoValido = (l) => (typeof l === 'string' && /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(l) ? l : '');
+  const nomePlano = (id) => (P.planos.find((x) => x.id === id) || {}).nome || id;
+  const REGIMES_EMP = { simples: 'Simples Nacional', presumido: 'Lucro Presumido', real: 'Lucro Real' };
+
+  // Confirmação desenhada na página (a janela nativa do navegador é bloqueada em alguns ambientes).
+  function confirmar(msg, aoConfirmar) {
+    const fundo = document.createElement('div');
+    fundo.className = 'modal-bg';
+    fundo.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><p>${esc(msg)}</p>
+      <div class="actions"><button class="btn danger" data-modal="ok">Confirmar</button><button class="btn secondary" data-modal="cancelar">Cancelar</button></div></div>`;
+    fundo.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-modal]');
+      if (!b && e.target !== fundo) return;
+      e.stopPropagation();
+      fundo.remove();
+      if (b && b.dataset.modal === 'ok') aoConfirmar();
+    });
+    document.body.appendChild(fundo);
+    fundo.querySelector('[data-modal=ok]').focus();
+  }
+
+  // Moldura: com menu (logado) ou tela cheia (entrar/cadastrar).
+  function montarMoldura(logado) {
+    document.body.classList.toggle('sem-menu', !logado);
+    const box = document.getElementById('usuario-box');
+    if (box) {
+      const rec = logado ? P.recursos(conta) : null;
+      box.innerHTML = logado ? `
+        <div class="usuario-nome">${esc((conta && conta.nome) || usuario.email)}</div>
+        <div class="usuario-plano">${esc(rec.nomePlano)}${rec.emTeste ? ` · ${rec.diasTeste} dia(s)` : ''}</div>
+        <button class="link-btn" data-action="sair">Sair</button>` : '';
+    }
+    const aviso = document.getElementById('aviso-demo');
+    if (aviso) {
+      aviso.hidden = S.modo !== 'demo';
+      aviso.textContent = S.aviso || 'Modo demonstração: os dados ficam só neste navegador e não há senha. Para usar com login de verdade, siga o passo a passo do README (Supabase).';
+    }
+  }
+
+  // ---------------------------------------------------------------- entrar / cadastrar
+  function telaAuth(titulo, corpo) {
+    $app.innerHTML = `<div class="auth"><div class="auth-card card">
+      <div class="auth-marca">LeãoHub</div>
+      <h1>${titulo}</h1>${corpo}</div>
+      <p class="muted small" style="text-align:center"><a href="index.html">Conheça o LeãoHub e os planos</a></p></div>`;
+  }
+  const demo = () => S.modo === 'demo';
+
+  function viewEntrar() {
+    telaAuth('Entrar', `
+      <form id="form-auth">
+        <label>E-mail</label><input name="email" type="email" autocomplete="email" required>
+        ${demo() ? '<p class="muted small">Modo demonstração: não precisa de senha.</p>' : '<label style="margin-top:10px">Senha</label><input name="senha" type="password" autocomplete="current-password" required>'}
+        <div id="auth-msg" class="small" style="margin-top:8px"></div>
+        <button class="btn" type="submit" style="width:100%;margin-top:12px">Entrar</button>
+      </form>
+      <p class="small" style="margin-top:14px">Ainda não tem conta? <a href="#/cadastro">Comece o teste grátis</a>${demo() ? '' : ' · <a href="#/recuperar">Esqueci a senha</a>'}</p>`);
+    enviarAuth(async (f) => { await S.auth.entrar({ email: f.get('email'), senha: f.get('senha') }); location.hash = '#/simulador'; });
+  }
+
+  function viewCadastro(planoPedido) {
+    const plano = P.planos.some((x) => x.id === planoPedido) ? planoPedido : 'profissional';
+    telaAuth(`Teste grátis por ${CFG.DIAS_TESTE || 14} dias`, `
+      <p class="muted small">Sem cartão. Durante o teste você usa os recursos do plano Profissional.</p>
+      <form id="form-auth">
+        <label>Seu nome ou nome da empresa</label><input name="nome" required>
+        <label style="margin-top:10px">E-mail</label><input name="email" type="email" autocomplete="email" required>
+        ${demo() ? '' : '<label style="margin-top:10px">Senha <span class="hint">(mínimo 6 caracteres)</span></label><input name="senha" type="password" minlength="6" autocomplete="new-password" required>'}
+        <label style="margin-top:10px">Plano que pretende assinar depois</label>
+        <select name="plano">${P.planos.map((x) => `<option value="${x.id}" ${x.id === plano ? 'selected' : ''}>${esc(x.nome)} — ${brl(x.preco)}/mês</option>`).join('')}</select>
+        <div id="auth-msg" class="small" style="margin-top:8px"></div>
+        <button class="btn" type="submit" style="width:100%;margin-top:12px">Criar conta e começar</button>
+      </form>
+      <p class="small" style="margin-top:14px">Já tem conta? <a href="#/entrar">Entrar</a></p>`);
+    enviarAuth(async (f) => {
+      const r = await S.auth.cadastrar({ nome: f.get('nome').trim(), email: f.get('email'), senha: f.get('senha'), plano: f.get('plano') });
+      if (r.confirmar) { mensagemAuth('Conta criada! Enviamos um e-mail de confirmação. Clique no link do e-mail e depois entre aqui.', 'ok'); return; }
+      location.hash = '#/empresas/nova';
+    });
+  }
+
+  function viewRecuperar() {
+    telaAuth('Recuperar senha', `
+      <form id="form-auth">
+        <label>E-mail da conta</label><input name="email" type="email" required>
+        <div id="auth-msg" class="small" style="margin-top:8px"></div>
+        <button class="btn" type="submit" style="width:100%;margin-top:12px">Enviar link para criar nova senha</button>
+      </form>
+      <p class="small" style="margin-top:14px"><a href="#/entrar">Voltar para entrar</a></p>`);
+    enviarAuth(async (f) => { await S.auth.recuperar(f.get('email')); mensagemAuth('Se o e-mail tiver conta, você vai receber um link em alguns minutos.', 'ok'); });
+  }
+
+  function viewNovaSenha() {
+    telaAuth('Criar nova senha', `
+      <form id="form-auth">
+        <label>Nova senha <span class="hint">(mínimo 6 caracteres)</span></label><input name="senha" type="password" minlength="6" required>
+        <div id="auth-msg" class="small" style="margin-top:8px"></div>
+        <button class="btn" type="submit" style="width:100%;margin-top:12px">Salvar nova senha</button>
+      </form>`);
+    enviarAuth(async (f) => { await S.auth.novaSenha(f.get('senha')); history.replaceState(null, '', location.pathname + '#/simulador'); toast('Senha alterada.'); render(); });
+  }
+
+  function mensagemAuth(texto, tipo) {
+    const el = document.getElementById('auth-msg');
+    if (el) el.innerHTML = `<span class="badge ${tipo === 'ok' ? 'ok' : 'warn'}" style="white-space:normal">${esc(texto)}</span>`;
+  }
+  function enviarAuth(acao) {
+    const form = document.getElementById('form-auth');
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const botao = form.querySelector('button[type=submit]');
+      botao.disabled = true;
+      try { await acao(new FormData(form)); } catch (err) { mensagemAuth(err.message, 'erro'); } finally { botao.disabled = false; }
+    });
+  }
+
+  function viewTesteAcabou() {
+    $app.innerHTML = `
+      <section class="card" style="max-width:640px">
+        <h1>Seu teste grátis terminou</h1>
+        <p>Para continuar usando o LeãoHub e manter suas empresas e simulações, escolha um plano.</p>
+        ${blocoAssinar()}
+        <p class="small" style="margin-top:14px"><a href="#/conta">Ver minha conta</a></p>
+      </section>`;
+  }
+
+  function blocoAssinar() {
+    const contato = (CFG.CONTATO_VENDAS || '').trim();
+    if (!contato) return '<p><span class="badge warn">Cobrança online em breve</span></p><p class="muted small">A assinatura ainda não está disponível pelo app.</p>';
+    const href = /^https?:\/\//i.test(contato) ? contato : 'mailto:' + contato;
+    return `<p><a class="btn" href="${esc(href)}" target="_blank" rel="noopener">Quero assinar</a></p><p class="muted small">Contato: ${esc(contato)}</p>`;
+  }
+
+  // ---------------------------------------------------------------- minhas empresas
+  async function viewEmpresas() {
+    const vez = renderVez;
+    const lista = await S.empresas.listar();
+    if (vez !== renderVez) return;
+    const rec = P.recursos(conta);
+    const cheio = lista.length >= rec.empresas;
+    $app.innerHTML = `
+      <header class="page-head">
+        <div><h1>Minhas empresas</h1><p class="muted">${lista.length} de ${rec.empresas} empresa(s) do plano ${esc(rec.nomePlano)}.</p></div>
+        ${cheio ? '<a class="btn secondary" href="#/conta">Ver planos para cadastrar mais</a>' : '<a class="btn" href="#/empresas/nova">+ Nova empresa</a>'}
+      </header>
+      <section class="card">${lista.length ? `<div class="table-wrap"><table>
+        <thead><tr><th>Empresa</th><th>CNPJ</th><th>Regime</th><th>Atividade</th><th class="num">Faturamento/mês</th><th></th></tr></thead>
+        <tbody>${lista.map((e) => `<tr>
+          <td><a href="#/empresas/${e.id}"><b>${esc(e.nome)}</b></a></td><td>${esc(e.cnpj) || '—'}</td>
+          <td>${esc(REGIMES_EMP[e.regime] || '')}</td><td>${esc((SETORES[e.setor] || {}).nome || '')}</td>
+          <td class="num">${brl(e.faturamento)}</td>
+          <td class="num"><a class="btn small" href="#/simulador/empresa-${e.id}">Simular</a></td></tr>`).join('')}</tbody></table></div>`
+        : '<p>Cadastre sua empresa para salvar simulações e gerar relatórios.</p><p><a class="btn" href="#/empresas/nova">Cadastrar a primeira empresa</a></p>'}</section>`;
+  }
+
+  async function viewEmpresaForm(id) {
+    const vez = renderVez;
+    const e = id ? await S.empresas.obter(id) : null;
+    if (vez !== renderVez) return;
+    if (id && !e) { location.hash = '#/empresas'; return; }
+    const v = e || { nome: '', cnpj: '', regime: 'presumido', setor: 'servicos', faturamento: '', obs: '' };
+    $app.innerHTML = `
+      <header class="page-head"><div><h1>${e ? 'Editar empresa' : 'Nova empresa'}</h1></div></header>
+      <form class="card" id="form-empresa">
+        <div class="fields">
+          <div class="full"><label>CNPJ <span class="hint">(opcional: preenche o nome e diz se é do Simples)</span></label>
+            <div class="cnpj-box"><input name="cnpj" id="emp-cnpj-input" data-cnpj="emp-cnpj" value="${esc(v.cnpj)}" placeholder="00.000.000/0000-00" inputmode="numeric">
+              <button type="button" class="btn secondary" data-action="consultarCnpj" data-id="emp-cnpj">Buscar dados</button></div>
+            <div id="emp-cnpj-res" class="small" style="margin-top:6px"></div></div>
+          <div class="full"><label>Nome / razão social</label><input name="nome" required value="${esc(v.nome)}"></div>
+          <div><label>Regime tributário</label><select name="regime">${opcoes(REGIMES_EMP, v.regime)}</select></div>
+          <div><label>Faturamento médio mensal (R$)</label><input name="faturamento" type="number" step="0.01" min="0" value="${esc(v.faturamento)}"></div>
+          <div class="full"><label>Tipo de atividade <span class="hint">(define a redução na reforma)</span></label><select name="setor" data-setor>${opcoes(SETORES, v.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select>${dicaSetor(v.setor)}</div>
+          <div class="full"><label>Observações</label><textarea name="obs">${esc(v.obs)}</textarea></div>
+        </div>
+        <div id="emp-msg" class="small" style="margin-top:8px"></div>
+        <div class="form-foot"><button class="btn" type="submit">Salvar</button><a class="btn secondary" href="${e ? '#/empresas/' + e.id : '#/empresas'}">Cancelar</a></div>
+      </form>`;
+    cnpjRetornos['emp-cnpj'] = (info) => {
+      const f = document.getElementById('form-empresa');
+      if (!f.elements.nome.value.trim()) f.elements.nome.value = info.razao;
+      if (info.simples || info.mei) f.elements.regime.value = 'simples';
+      else if (f.elements.regime.value === 'simples') f.elements.regime.value = 'presumido';
+    };
+    document.getElementById('form-empresa').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const f = new FormData(ev.target);
+      const dados = { nome: f.get('nome').trim(), cnpj: f.get('cnpj').trim(), regime: f.get('regime'), setor: f.get('setor'), faturamento: num(f.get('faturamento')), obs: f.get('obs').trim() };
+      if (e) dados.id = e.id;
+      try {
+        const salva = await S.empresas.salvar(dados);
+        toast('Empresa salva.');
+        location.hash = '#/empresas/' + salva.id;
+      } catch (err) {
+        document.getElementById('emp-msg').innerHTML = `<span class="badge warn" style="white-space:normal">${esc(err.message)}</span>`;
+      }
+    });
+  }
+
+  async function viewEmpresa(id) {
+    const vez = renderVez;
+    const [e, sims] = await Promise.all([S.empresas.obter(id), S.simulacoes.listar(id)]);
+    if (vez !== renderVez) return;
+    if (!e) { location.hash = '#/empresas'; return; }
+    $app.innerHTML = `
+      <header class="page-head">
+        <div><h1>${esc(e.nome)}</h1><p class="muted">${esc(REGIMES_EMP[e.regime] || '')} · ${esc((SETORES[e.setor] || {}).nome || '')}${e.cnpj ? ' · ' + esc(e.cnpj) : ''}</p></div>
+        <div class="actions">
+          <a class="btn" href="#/simulador/empresa-${e.id}">Nova simulação</a>
+          <a class="btn secondary" href="#/empresas/${e.id}/editar">Editar</a>
+          <button class="btn secondary" data-action="excluirEmpresa" data-id="${e.id}" data-confirm="Excluir esta empresa? As simulações dela continuam salvas, sem empresa.">Excluir</button>
+        </div>
+      </header>
+      <section class="card"><h2>Dados</h2>
+        <p><b>Faturamento médio:</b> ${brl(e.faturamento)}<br><b>Redução na reforma:</b> ${(SETORES[e.setor] || SETORES.geral).reducao}%</p>
+        ${e.obs ? `<p class="muted">${esc(e.obs)}</p>` : ''}
+        ${e.regime === 'simples' ? '<div class="note">Empresa do Simples: pode continuar no Simples e pagar CBS/IBS dentro do DAS, ou pagar "por fora" para que os clientes empresa tenham crédito cheio. O simulador compara com o regime regular.</div>' : ''}
+      </section>
+      <section class="card"><h2>Simulações salvas</h2>${tabelaSimulacoes(sims)}</section>`;
+  }
+
+  function tabelaSimulacoes(sims) {
+    if (!sims.length) return '<p class="muted">Nenhuma simulação salva ainda. Faça uma no simulador e clique em "Salvar simulação".</p>';
+    return `<div class="table-wrap"><table>
+      <thead><tr><th>Data</th><th>Simulação</th><th>Período</th><th class="num">Imposto hoje</th><th class="num">Com a reforma</th><th class="num">Diferença</th><th></th></tr></thead>
+      <tbody>${sims.map((s) => { const r = s.resultado || {}; const dados = s.dados || {}; const inp = dados.inp || {}; return `<tr>
+        <td>${dataBR(s.criado_em)}</td><td>${esc(s.titulo) || '—'}</td><td>${inp.escopo === 'cbs_ibs' ? '2033' : '2027–2028'}</td>
+        <td class="num">${brl(r.totalHoje)}</td><td class="num">${brl(r.aPagar)}</td>
+        <td class="num">${r.diferenca > 0 ? '+' : ''}${brl(r.diferenca)}</td>
+        <td class="num acoes-linha"><a class="btn small secondary" href="#/simulador/sim-${s.id}">Abrir</a>
+          <a class="btn small secondary" href="#/relatorio/${s.id}">Relatório</a>
+          <button class="link-btn danger small" data-action="excluirSimulacao" data-id="${s.id}" data-confirm="Excluir esta simulação?">excluir</button></td></tr>`; }).join('')}</tbody></table></div>`;
+  }
+
+  // ---------------------------------------------------------------- relatório (impressão / PDF)
+  async function viewRelatorio(id) {
+    const vez = renderVez;
+    let fonte = null;
+    if (id === 'atual') {
+      const s = viewSimulador.ultimo;
+      if (s) fonte = { inp: s.inp, dividendos: s.dividendos, params: db.params, empresaId: s.empresaId, titulo: s.titulo, data: new Date().toISOString() };
+    } else {
+      const sim = await S.simulacoes.obter(id);
+      if (sim && sim.dados && sim.dados.inp) fonte = { inp: sim.dados.inp, dividendos: sim.dados.dividendos || 0, params: Object.assign({}, PARAMS_PADRAO, sim.dados.params || {}), empresaId: sim.empresa_id, titulo: sim.titulo, data: sim.criado_em };
+    }
+    if (vez !== renderVez) return;
+    if (!fonte) { location.hash = '#/simulador'; return; }
+    const emp = fonte.empresaId ? await S.empresas.obter(fonte.empresaId) : null;
+    if (vez !== renderVez) return;
+    const p = fonte.params;
+    const inp = fonte.inp;
+    const r = calcularReforma(inp, p);
+    const div = calcularDividendos(fonte.dividendos, p);
+    const rec = P.recursos(conta);
+    const propria = rec.marcaPropria && conta && (logoValido(conta.logo) || conta.nome);
+    const marca = propria ? { nome: conta.nome, logo: logoValido(conta.logo), cor: corValida(conta.cor) } : { nome: 'LeãoHub', logo: '', cor: '#0f766e' };
+    const periodo = r.comIbs ? `2033 em diante: CBS + IBS (${pct(p.cbs2033 + p.ibs)})` : `2027–2028: CBS (${pct(p.cbs)})`;
+    $app.innerHTML = `
+      <div class="no-print relatorio-acoes">
+        <button class="btn" data-action="imprimir">Imprimir / salvar em PDF</button>
+        <a class="btn secondary" href="${id === 'atual' ? '#/simulador' : (fonte.empresaId ? '#/empresas/' + fonte.empresaId : '#/simulador')}">Voltar</a>
+        <span class="muted small">Na janela de impressão, escolha "Salvar como PDF".</span>
+        ${!rec.marcaPropria ? '<span class="muted small">Logo próprio no relatório: planos Profissional e Grupo.</span>' : (!propria ? '<span class="muted small">Adicione seu logo em <a href="#/conta">Minha conta</a>.</span>' : '')}
+      </div>
+      <article class="relatorio card" style="--marca:${marca.cor}">
+        <header class="rel-topo">
+          ${marca.logo ? `<img class="rel-logo" src="${marca.logo}" alt="${esc(marca.nome)}">` : `<div class="rel-nome-marca">${esc(marca.nome)}</div>`}
+          <div class="rel-titulo"><h1>Simulação da reforma tributária</h1>
+            <p>${emp ? `<b>${esc(emp.nome)}</b>${emp.cnpj ? ' · CNPJ ' + esc(emp.cnpj) : ''} · ` : ''}${dataBR(fonte.data)}${fonte.titulo ? ' · ' + esc(fonte.titulo) : ''}</p></div>
+        </header>
+        <table class="calc-lines rel-premissas"><tbody>
+          <tr><td>Período comparado</td><td>${esc(periodo)}</td></tr>
+          <tr><td>Atividade</td><td>${esc(r.setor.nome)} (redução de ${r.setor.reducao}%)</td></tr>
+          <tr><td>Regime atual</td><td>${inp.regimeAtual === 'real' ? 'Lucro Real' : 'Lucro Presumido'}</td></tr>
+          <tr><td>Receita do mês</td><td>${brl(inp.receita)}</td></tr>
+          <tr><td>Compras de fornecedores fora do Simples / do Simples</td><td>${brl(inp.despReg)} / ${brl(inp.despSimples)}</td></tr>
+          <tr><td>Folha de pagamento</td><td>${brl(inp.folha)}</td></tr>
+        </tbody></table>
+        <div class="result-grid">
+          <div class="result"><span>${r.comIbs ? 'PIS/COFINS + ISS hoje' : 'PIS/COFINS hoje'}</span><b>${brl(r.totalHoje)}</b></div>
+          <div class="result rel-destaque"><span>${r.comIbs ? 'CBS + IBS' : 'CBS'} a pagar (após créditos)</span><b>${brl(r.aPagar)}</b></div>
+          <div class="result"><span>Diferença por mês</span><b>${r.diferenca > 0 ? '+' : ''}${brl(r.diferenca)}</b></div>
+          <div class="result"><span>Diferença em 12 meses</span><b>${r.diferenca * 12 > 0 ? '+' : ''}${brl(r.diferenca * 12)}</b></div>
+        </div>
+        <h3>Como chegamos a esses números</h3>
+        <table class="calc-lines"><tbody>
+          <tr><td>PIS/COFINS hoje: ${brl(inp.receita)} × ${pct(r.aliqPC)}</td><td class="num">${brl(r.pcBruto)}</td></tr>
+          ${r.pcCredito ? `<tr><td>(−) Créditos de PIS/COFINS</td><td class="num">−${brl(r.pcCredito)}</td></tr>` : ''}
+          ${r.comIbs ? `<tr><td>ISS hoje: ${brl(inp.receita)} × ${pct(inp.iss)}</td><td class="num">${brl(r.issHoje)}</td></tr>` : ''}
+          <tr class="total"><td>Total hoje</td><td class="num">${brl(r.totalHoje)}</td></tr>
+          <tr><td>Débito CBS: ${brl(inp.receita)} × ${pct(r.aliqCbsEf)}</td><td class="num">${brl(r.debCbs)}</td></tr>
+          ${r.comIbs ? `<tr><td>Débito IBS: ${brl(inp.receita)} × ${pct(r.aliqIbsEf)}</td><td class="num">${brl(r.debIbs)}</td></tr>` : ''}
+          <tr><td>(−) Crédito sobre compras fora do Simples (${pct(r.aliqCredito)})</td><td class="num">−${brl(r.credFornec)}</td></tr>
+          ${r.credSimples ? `<tr><td>(−) Crédito sobre compras do Simples (${pct(p.creditoSimples)})</td><td class="num">−${brl(r.credSimples)}</td></tr>` : ''}
+          ${inp.creditoAnterior ? `<tr><td>(−) Crédito acumulado do mês anterior</td><td class="num">−${brl(inp.creditoAnterior)}</td></tr>` : ''}
+          <tr class="total"><td>A pagar com a reforma</td><td class="num">${brl(r.aPagar)}</td></tr>
+        </tbody></table>
+        ${r.creditoProx ? `<p>Crédito que sobra para o mês seguinte: <b>${brl(r.creditoProx)}</b>.</p>` : ''}
+        <h3>Caixa (split payment)</h3>
+        <p>Quando o split payment estiver valendo, cerca de <b>${brl(r.splitRetido)}</b> (${pct(r.splitPctReceita)} da receita) serão retidos no recebimento. Em 2027 ele começa opcional e só entre empresas; a obrigatoriedade ainda não tem data.</p>
+        ${fonte.dividendos > 0 ? `<h3>Distribuição de lucros (${brl(fonte.dividendos)} no mês, por sócio)</h3>
+          <p>Regra atual (Lei 15.270/2025): retenção de <b>${brl(div.atual)}</b>${div.atual ? ' (10% sobre o total, por passar de R$ 50 mil no mês)' : ' (até R$ 50 mil no mês não há retenção)'}.</p>` : ''}
+        <footer class="rel-rodape">
+          <p><b>Premissas:</b> CBS 2027–2028 de ${pct(p.cbs)} (cálculo do TCU, pendente de fixação pelo Senado); regime completo de ${pct(p.cbs2033 + p.ibs)} (estimativa do Comitê Gestor do IBS). Alíquotas ainda não definitivas; os anos de transição 2029–2032 não estão no cálculo.</p>
+          <p>Esta é uma estimativa para planejamento e não substitui a análise de um contador.</p>
+          <p class="muted">Gerado ${propria ? 'com LeãoHub ' : ''}em ${dataBR(new Date().toISOString())}.</p>
+        </footer>
+      </article>`;
+  }
+
+  // ---------------------------------------------------------------- minha conta
+  async function viewConta() {
+    const rec = P.recursos(conta);
+    const escolhido = conta.plano_escolhido || 'profissional';
+    $app.innerHTML = `
+      <header class="page-head"><div><h1>Minha conta</h1><p class="muted">${esc(usuario.email)}</p></div>
+        <button class="btn secondary" data-action="sair">Sair</button></header>
+      <section class="card">
+        <h2>Plano</h2>
+        <p>Plano atual: <b>${esc(rec.nomePlano)}</b>${rec.emTeste ? ` · ${rec.testeAcabou ? '<span class="badge warn">teste encerrado</span>' : `faltam <b>${rec.diasTeste}</b> dia(s) de teste (até ${dataBR(conta.teste_ate)})`}` : ''} · até ${rec.empresas} empresa(s)</p>
+        <form id="form-plano">
+          <div class="planos-mini">${P.planos.map((x) => `<label class="plano-mini ${x.id === escolhido ? 'sel' : ''}">
+            <input type="radio" name="plano" value="${x.id}" ${x.id === escolhido ? 'checked' : ''}>
+            <b>${esc(x.nome)}</b><span>${brl(x.preco)}/mês · até ${x.empresas} empresa(s)${x.marcaPropria ? ' · relatório com sua marca' : ''}</span></label>`).join('')}</div>
+        </form>
+        ${blocoAssinar()}
+      </section>
+      <form class="card" id="form-marca">
+        <h2>Sua marca nos relatórios</h2>
+        ${rec.marcaPropria ? '' : '<div class="note">Disponível nos planos Profissional e Grupo. No seu plano, o relatório sai com a marca LeãoHub.</div>'}
+        <div class="fields">
+          <div><label>Nome que aparece no relatório</label><input name="nome" value="${esc(conta.nome)}"></div>
+          <div><label>Cor principal</label><input name="cor" type="color" value="${corValida(conta.cor)}" style="height:40px;padding:4px"></div>
+          <div class="full"><label>Logo <span class="hint">(PNG ou JPG; reduzimos automaticamente)</span></label>
+            <input id="logo-arquivo" type="file" accept="image/png,image/jpeg,image/webp">
+            <div id="logo-previa" style="margin-top:10px">${logoValido(conta.logo) ? `<img src="${logoValido(conta.logo)}" alt="Logo" class="logo-previa"> <button type="button" class="link-btn danger" data-action="removerLogo">remover logo</button>` : '<span class="muted small">Nenhum logo enviado.</span>'}</div></div>
+        </div>
+        <div class="form-foot"><button class="btn" type="submit">Salvar</button></div>
+      </form>`;
+    document.getElementById('form-plano').addEventListener('change', async (e) => {
+      if (e.target.name !== 'plano') return;
+      try { conta = await S.conta.salvar({ plano_escolhido: e.target.value }); toast('Plano de interesse atualizado.'); render(); } catch (err) { toast(err.message); }
+    });
+    let novoLogo = null;
+    document.getElementById('logo-arquivo').addEventListener('change', async (e) => {
+      const arq = e.target.files[0];
+      if (!arq) return;
+      try {
+        novoLogo = await reduzirImagem(arq, 480, 160);
+        document.getElementById('logo-previa').innerHTML = `<img src="${novoLogo}" alt="Logo" class="logo-previa"> <span class="muted small">Clique em Salvar para usar.</span>`;
+      } catch (err) { toast('Não foi possível ler a imagem.'); }
+    });
+    document.getElementById('form-marca').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const campos = { nome: f.get('nome').trim(), cor: corValida(f.get('cor')) };
+      if (novoLogo) campos.logo = novoLogo;
+      try { conta = await S.conta.salvar(campos); toast('Marca salva.'); render(); } catch (err) { toast(err.message); }
+    });
+  }
+
+  function reduzirImagem(arquivo, maxL, maxA) {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onerror = reject;
+      leitor.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const escala = Math.min(1, maxL / img.width, maxA / img.height);
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * escala));
+          c.height = Math.max(1, Math.round(img.height * escala));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          resolve(c.toDataURL('image/png'));
+        };
+        img.src = leitor.result;
+      };
+      leitor.readAsDataURL(arquivo);
+    });
   }
 
   // --- configurações
@@ -759,15 +1183,31 @@
   // ---------------------------------------------------------------- ações
   const acoes = {
     copiarSimulacao() { const t = textoSimulacao(); if (t) copiar(t); },
+    async salvarSimulacao() {
+      const s = viewSimulador.ultimo;
+      if (!s) return;
+      const titulo = s.titulo || `Simulação de ${dataBR(new Date().toISOString())}`;
+      await S.simulacoes.salvar({ empresa_id: s.empresaId || null, titulo, dados: { inp: s.inp, dividendos: s.dividendos, params: copiaParams() }, resultado: resumoResultado(s.r) });
+      toast(s.empresaId ? 'Simulação salva no histórico da empresa.' : 'Simulação salva (sem empresa).');
+    },
+    relatorioAtual() { if (viewSimulador.ultimo) location.hash = '#/relatorio/atual'; },
+    imprimir() { window.print(); },
     restaurarParams() { db.params = Object.assign({}, PARAMS_PADRAO); salvar(); toast('Parâmetros restaurados.'); render(); },
     consultarCnpj(prefixo) { consultarCnpj(prefixo); },
+    async excluirEmpresa(id) { await S.empresas.excluir(id); toast('Empresa excluída.'); location.hash = '#/empresas'; },
+    async excluirSimulacao(id) { await S.simulacoes.excluir(id); toast('Simulação excluída.'); render(); },
+    async removerLogo() { conta = await S.conta.salvar({ logo: '' }); toast('Logo removido.'); render(); },
+    async sair() { await S.auth.sair(); usuario = null; conta = null; location.hash = '#/entrar'; render(); },
   };
 
   document.addEventListener('click', (e) => {
     const el = e.target.closest('[data-action]');
     if (!el || !acoes[el.dataset.action]) return;
     e.preventDefault();
-    acoes[el.dataset.action](el.dataset.id, el, e);
+    const executar = async () => {
+      try { await acoes[el.dataset.action](el.dataset.id, el, e); } catch (err) { toast(err.message || 'Não foi possível concluir.'); }
+    };
+    if (el.dataset.confirm) confirmar(el.dataset.confirm, executar); else executar();
   });
 
   // Enter no campo de CNPJ consulta, em vez de enviar o formulário.
@@ -777,26 +1217,48 @@
   });
 
   // ---------------------------------------------------------------- rotas
+  const PUBLICAS = ['entrar', 'cadastro', 'recuperar', 'nova-senha'];
   function marcarNav(rotaAtual) {
     document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('active', a.dataset.route === rotaAtual));
   }
 
-  function render() {
-    const [a, b] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-    marcarNav(a || 'simulador');
+  async function render() {
+    const vez = ++renderVez;
+    const [a, b, c] = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
     try {
+      usuario = await S.auth.usuario();
+      if (vez !== renderVez) return;
+      if (!usuario && !PUBLICAS.includes(a)) { montarMoldura(false); if (a !== 'entrar') { location.hash = '#/entrar'; return; } }
+      if (usuario && (a === 'entrar' || a === 'cadastro')) { location.hash = '#/simulador'; return; }
+      conta = usuario ? ((await S.conta.obter()) || { nome: '', logo: '', cor: '#0f766e', plano: 'teste', plano_escolhido: 'profissional', teste_ate: P.hoje() }) : null;
+      if (vez !== renderVez) return;
+      montarMoldura(!!usuario);
+      marcarNav(a || 'simulador');
+      if (usuario && P.recursos(conta).testeAcabou && !['conta', 'config', 'nova-senha'].includes(a)) { viewTesteAcabou(); window.scrollTo(0, 0); return; }
       switch (a) {
-        case undefined: viewSimulador(); break;
-        case 'simulador': viewSimulador(b); break;
+        case 'entrar': viewEntrar(); break;
+        case 'cadastro': viewCadastro(b); break;
+        case 'recuperar': viewRecuperar(); break;
+        case 'nova-senha': viewNovaSenha(); break;
+        case undefined: await viewSimulador(); break;
+        case 'simulador': await viewSimulador(b); break;
         case 'cenarios': viewCenarios(); break;
         case 'servicos': viewServicos(); break;
         case 'pendencias': viewPendencias(); break;
+        case 'empresas':
+          if (!b) await viewEmpresas();
+          else if (b === 'nova') await viewEmpresaForm();
+          else if (c === 'editar') await viewEmpresaForm(b);
+          else await viewEmpresa(b);
+          break;
+        case 'relatorio': await viewRelatorio(b); break;
+        case 'conta': await viewConta(); break;
         case 'config': viewConfig(); break;
-        default: viewSimulador();
+        default: await viewSimulador();
       }
     } catch (err) {
       console.error(err);
-      $app.innerHTML = `<section class="card"><h2>Algo deu errado</h2><p>${esc(err.message)}</p></section>`;
+      if (vez === renderVez) $app.innerHTML = `<section class="card"><h2>Algo deu errado</h2><p>${esc(err.message)}</p></section>`;
     }
     window.scrollTo(0, 0);
   }
@@ -804,5 +1266,11 @@
   window.addEventListener('hashchange', render);
   // Expõe o cálculo para testes automatizados.
   window.LeaoHub = { calcularReforma, calcularDividendos, PARAMS_PADRAO };
+  // Link de "esqueci a senha" (Supabase) volta com ?nova-senha=1.
+  S.auth.aoMudar((evento) => {
+    if (evento === 'PASSWORD_RECOVERY') location.hash = '#/nova-senha';
+    else if (evento === 'SIGNED_IN' || evento === 'SIGNED_OUT') render();
+  });
+  if (new URLSearchParams(location.search).has('nova-senha')) location.hash = '#/nova-senha';
   render();
 })();
