@@ -34,6 +34,14 @@
       nome: 'Cursos online, comunidades pagas e infoprodutos (mentorias, e-books)', reducao: 0,
       dica: 'Em regra, alíquota cheia. Para "cursos livres" há interpretações diferentes sobre a redução da educação: confirme com o contador antes de usar.',
     },
+    hospitalidade: {
+      nome: 'Bares, restaurantes, hotelaria, parques e turismo', reducao: 40,
+      dica: 'Regime específico com redução de 40%. Em bares, restaurantes e hotelaria, o cliente empresa NÃO pode tomar crédito do que paga.',
+    },
+    cultura: {
+      nome: 'Produções artísticas, culturais, jornalísticas e audiovisuais nacionais', reducao: 60,
+      dica: 'Redução de 60% para as produções nacionais listadas na lei (art. 139 da LC 214/2025), com condições. Confirme o enquadramento com o contador.',
+    },
     geral: {
       nome: 'Comércio (venda de produtos)', reducao: 0,
       dica: 'Sem redução: alíquota cheia, com crédito sobre as mercadorias compradas de empresas fora do Simples.',
@@ -508,8 +516,11 @@
   // --- simulador
   function viewSimulador(clienteId) {
     const p = db.params;
+    // '#/simulador/setor-xxx' abre o simulador já com o tipo de atividade escolhido (vem da aba de tipos de serviço).
+    const setorPedido = clienteId && clienteId.startsWith('setor-') ? clienteId.slice(6) : null;
+    if (setorPedido) clienteId = null;
     const c = clienteId ? cliente(clienteId) : null;
-    const ini = { receita: 50000, despReg: 20000, despSimples: 0, folha: 0, setor: 'saude', regimeAtual: 'presumido', escopo: 'cbs', iss: p.issPadrao, creditoAnterior: 0, dividendos: 0 };
+    const ini = { receita: 50000, despReg: 20000, despSimples: 0, folha: 0, setor: SETORES[setorPedido] ? setorPedido : 'saude', regimeAtual: 'presumido', escopo: 'cbs', iss: p.issPadrao, creditoAnterior: 0, dividendos: 0 };
     let origem = 'Valores de exemplo (receita R$ 50 mil, despesas R$ 20 mil).';
     if (c) {
       ini.setor = c.setor;
@@ -780,6 +791,138 @@
       atualizar();
     };
     atualizar();
+  }
+
+  // --- tipos de serviço e enquadramento na reforma
+  // faixa: 'cheia' | '30' | '40' | '60' | 'proprio'. setor: chave de SETORES usada no simulador (ou null).
+  const SERVICOS = [
+    // Saúde
+    { grupo: 'Saúde', servico: 'Consultas médicas e clínicas', exemplos: 'Clínica geral, especialidades, pronto atendimento', faixa: '60', setor: 'saude', obs: 'Serviços do Anexo III, classificados pelo código NBS.', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Odontologia', exemplos: 'Consultório, clínica odontológica, tratamento, prótese', faixa: '60', setor: 'saude', obs: 'Está no Anexo III (código NBS de odontologia).', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Hospitais, cirurgias e UTI', exemplos: 'Internação, centro cirúrgico, urgência', faixa: '60', setor: 'saude', obs: '', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Laboratórios e exames de imagem', exemplos: 'Análises clínicas, raio-X, ultrassom, ressonância', faixa: '60', setor: 'saude', obs: '', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Fisioterapia, fonoaudiologia e terapia ocupacional', exemplos: 'Reabilitação, terapias', faixa: '60', setor: 'saude', obs: '', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Psicologia e psiquiatria', exemplos: 'Consultório, clínica de saúde mental', faixa: '60', setor: 'saude', obs: '', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Enfermagem e atendimento domiciliar', exemplos: 'Home care, enfermagem', faixa: '60', setor: 'saude', obs: '', base: 'Art. 130 e Anexo III' },
+    { grupo: 'Saúde', servico: 'Procedimentos só estéticos', exemplos: 'Procedimento sem finalidade de saúde', faixa: 'cheia', setor: 'servicos', obs: 'Procedimento com finalidade exclusivamente cosmética pode ficar fora da redução da saúde. Confirme a classificação com o contador.', base: 'Art. 130 (interpretação)' },
+    { grupo: 'Saúde', servico: 'Planos de saúde', exemplos: 'Operadoras, cooperativas médicas, seguro-saúde', faixa: 'proprio', setor: null, obs: 'Regime específico, com cálculo próprio.', base: 'Arts. 234 a 243' },
+    // Educação
+    { grupo: 'Educação', servico: 'Educação infantil, fundamental e médio', exemplos: 'Creche, pré-escola, escola', faixa: '60', setor: 'educacao', obs: 'Só os serviços de ensino da lista do Anexo II. Outras vendas da escola pagam alíquota cheia.', base: 'Art. 129 e Anexo II' },
+    { grupo: 'Educação', servico: 'Ensino superior e curso técnico', exemplos: 'Graduação, pós-graduação, técnico', faixa: '60', setor: 'educacao', obs: 'Só os serviços listados no Anexo II.', base: 'Art. 129 e Anexo II' },
+    { grupo: 'Educação', servico: 'Cursos livres, idiomas e cursos online', exemplos: 'Escola de inglês, curso livre, curso gravado', faixa: 'cheia', setor: 'digital', obs: 'Há interpretações diferentes sobre a redução da educação. O sistema assume alíquota cheia: confirme com o contador.', base: 'Art. 129 e Anexo II (divergência)' },
+    { grupo: 'Educação', servico: 'Infoprodutos, mentorias e comunidades pagas', exemplos: 'E-book, mentoria, comunidade por assinatura', faixa: 'cheia', setor: 'digital', obs: '', base: 'Regra geral' },
+    // Profissões regulamentadas
+    { grupo: 'Profissões regulamentadas', servico: 'Advocacia', exemplos: 'Advogado, sociedade de advogados', faixa: '30', setor: 'profissional', obs: 'Vale para PF ou sociedade com sócios habilitados no conselho e sem empresa como sócia.', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Contabilidade', exemplos: 'Escritório contábil, contador', faixa: '30', setor: 'profissional', obs: 'Mesmas condições: sócios habilitados no conselho e sem empresa como sócia.', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Engenharia e agronomia', exemplos: 'Projetos, laudos, ART', faixa: '30', setor: 'profissional', obs: 'Mesmas condições do art. 127.', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Arquitetura e urbanismo', exemplos: 'Projetos arquitetônicos', faixa: '30', setor: 'profissional', obs: 'Mesmas condições do art. 127.', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Administração e economia', exemplos: 'Administrador, economista', faixa: '30', setor: 'profissional', obs: 'Mesmas condições do art. 127.', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Veterinária e zootecnia', exemplos: 'Clínica veterinária', faixa: '30', setor: 'profissional', obs: 'Hoje está na lista de 30%. Há projeto para mudar para a lista da saúde (60%).', base: 'Art. 127' },
+    { grupo: 'Profissões regulamentadas', servico: 'Outras profissões da lista', exemplos: 'Assistente social, bibliotecário, biólogo, educação física, estatístico, museólogo, químico, relações públicas, técnico industrial e agrícola', faixa: '30', setor: 'profissional', obs: 'A lista é fechada: profissão fora dela não tem a redução, mesmo com conselho.', base: 'Art. 127' },
+    // Tecnologia e marketing
+    { grupo: 'Tecnologia e marketing', servico: 'Software, SaaS e serviços de TI', exemplos: 'Sistemas, plataformas, desenvolvimento, suporte', faixa: 'cheia', setor: 'software', obs: 'TI ficou fora das reduções. Vender sistema para escola ou clínica não muda isso.', base: 'Regra geral' },
+    { grupo: 'Tecnologia e marketing', servico: 'Segurança da informação e cibernética', exemplos: 'Serviços de segurança digital', faixa: '60', setor: null, obs: 'Redução com condição sobre os sócios da empresa. Confirme com o contador.', base: 'Art. 142' },
+    { grupo: 'Tecnologia e marketing', servico: 'Agência de marketing e publicidade', exemplos: 'Gestão de tráfego, social media, criação de conteúdo', faixa: 'cheia', setor: 'servicos', obs: '', base: 'Regra geral' },
+    { grupo: 'Tecnologia e marketing', servico: 'Comunicação institucional para órgãos públicos', exemplos: 'Agência contratada pelo governo', faixa: '60', setor: null, obs: 'Só quando o contratante é a administração pública. Para empresas privadas, alíquota cheia.', base: 'Art. 140' },
+    // Cultura, esporte e turismo
+    { grupo: 'Cultura, esporte e turismo', servico: 'Produções artísticas, culturais, jornalísticas e audiovisuais nacionais', exemplos: 'Shows, teatro, cinema, eventos culturais', faixa: '60', setor: 'cultura', obs: 'Vale para as produções listadas na lei, com condições.', base: 'Art. 139' },
+    { grupo: 'Cultura, esporte e turismo', servico: 'Atividades desportivas', exemplos: 'Eventos e práticas esportivas', faixa: '60', setor: null, obs: 'Confirme as condições do art. 141 com o contador.', base: 'Art. 141' },
+    { grupo: 'Cultura, esporte e turismo', servico: 'Bares, restaurantes e lanchonetes', exemplos: 'Alimentação fora de casa', faixa: '40', setor: 'hospitalidade', obs: 'O cliente empresa não pode tomar crédito. Bebida alcoólica fica fora da redução.', base: 'Arts. 273 a 276' },
+    { grupo: 'Cultura, esporte e turismo', servico: 'Hotelaria e parques', exemplos: 'Hotel, pousada, parque de diversão ou temático', faixa: '40', setor: 'hospitalidade', obs: 'O cliente empresa não pode tomar crédito.', base: 'Arts. 277 a 283' },
+    { grupo: 'Cultura, esporte e turismo', servico: 'Agências de turismo', exemplos: 'Agência de viagens', faixa: '40', setor: 'hospitalidade', obs: 'O imposto incide sobre a receita da agência, sem os valores repassados a terceiros.', base: 'Arts. 288 a 291' },
+    // Outros
+    { grupo: 'Outros serviços', servico: 'Imóveis: venda e aluguel', exemplos: 'Incorporação, venda, locação', faixa: 'proprio', setor: null, obs: 'Regime específico: redução de 50% na venda e 70% na locação, além de redutores na base.', base: 'Regime de bens imóveis' },
+    { grupo: 'Outros serviços', servico: 'Bancos, seguros e serviços financeiros', exemplos: 'Instituições financeiras, seguradoras', faixa: 'proprio', setor: null, obs: 'Regime específico, com cálculo próprio.', base: 'Regime de serviços financeiros' },
+    { grupo: 'Outros serviços', servico: 'Consultoria, design, fotografia e tradução', exemplos: 'Profissões não regulamentadas', faixa: 'cheia', setor: 'servicos', obs: 'Sem conselho profissional da lista do art. 127, não há redução.', base: 'Regra geral' },
+    { grupo: 'Outros serviços', servico: 'Salão de beleza e estética', exemplos: 'Cabeleireiro, manicure, estética', faixa: 'cheia', setor: 'servicos', obs: '', base: 'Regra geral' },
+    { grupo: 'Outros serviços', servico: 'Limpeza, manutenção e conservação', exemplos: 'Terceirização de serviços', faixa: 'cheia', setor: 'servicos', obs: '', base: 'Regra geral' },
+    { grupo: 'Outros serviços', servico: 'Transporte de cargas e logística', exemplos: 'Frete, entregas', faixa: 'cheia', setor: 'servicos', obs: '', base: 'Regra geral' },
+    { grupo: 'Outros serviços', servico: 'Comércio de produtos', exemplos: 'Lojas, mercados, e-commerce', faixa: 'cheia', setor: 'geral', obs: 'Alguns produtos têm regra própria (ex.: cesta básica com alíquota zero; alguns alimentos, higiene e medicamentos com 60%).', base: 'Regra geral e anexos' },
+  ];
+  // Palavras extras para a busca (como as pessoas costumam chamar cada serviço).
+  const SINONIMOS = {
+    'Consultas médicas e clínicas': 'médico medico clínica consultório pediatra cardiologista dermatologista',
+    'Odontologia': 'dentista ortodontia ortodontista implante aparelho dental',
+    'Hospitais, cirurgias e UTI': 'hospital cirurgião',
+    'Laboratórios e exames de imagem': 'exame sangue radiologia tomografia',
+    'Fisioterapia, fonoaudiologia e terapia ocupacional': 'fisioterapeuta fonoaudiólogo pilates clínico',
+    'Psicologia e psiquiatria': 'psicólogo psicologo psiquiatra terapia terapeuta',
+    'Enfermagem e atendimento domiciliar': 'enfermeiro cuidador',
+    'Procedimentos só estéticos': 'harmonização botox clareamento estética',
+    'Cursos livres, idiomas e cursos online': 'inglês ingles espanhol EAD curso online escola de idiomas',
+    'Infoprodutos, mentorias e comunidades pagas': 'curso digital hotmart coach coaching comunidade membros',
+    'Advocacia': 'advogado jurídico',
+    'Contabilidade': 'contador contábil',
+    'Engenharia e agronomia': 'engenheiro agrônomo',
+    'Arquitetura e urbanismo': 'arquiteto',
+    'Administração e economia': 'administrador economista',
+    'Veterinária e zootecnia': 'veterinário pet animal',
+    'Software, SaaS e serviços de TI': 'sistema aplicativo app programador desenvolvedor tecnologia plataforma assinatura',
+    'Agência de marketing e publicidade': 'tráfego pago anúncios social media designer criativo',
+    'Bares, restaurantes e lanchonetes': 'restaurante bar lanchonete comida delivery',
+    'Hotelaria e parques': 'hotel pousada hospedagem',
+    'Agências de turismo': 'viagem turismo',
+    'Salão de beleza e estética': 'cabeleireiro barbearia manicure',
+    'Comércio de produtos': 'loja varejo venda produtos',
+  };
+  SERVICOS.forEach((s) => { s.busca = SINONIMOS[s.servico] || ''; });
+
+  const FAIXAS = {
+    cheia: { nome: 'Alíquota cheia', reducao: 0, classe: '' },
+    '30': { nome: 'Redução de 30%', reducao: 30, classe: 'accent' },
+    '40': { nome: 'Redução de 40% (regime específico)', reducao: 40, classe: 'accent' },
+    '60': { nome: 'Redução de 60%', reducao: 60, classe: 'ok' },
+    proprio: { nome: 'Regime próprio', reducao: null, classe: 'warn' },
+  };
+
+  function viewServicos() {
+    const p = db.params;
+    const cheia = p.cbs + p.ibs;
+    const efetiva = (f) => (FAIXAS[f].reducao == null ? 'cálculo próprio' : pct(cheia * (1 - FAIXAS[f].reducao / 100)));
+    $app.innerHTML = `
+      <header class="page-head">
+        <div><h1>Tipos de serviço e enquadramento</h1>
+          <p class="muted">Procure o serviço e veja em qual faixa da reforma tributária ele se encaixa.</p></div>
+      </header>
+      <section class="card">
+        <h2>Como ler</h2>
+        <p>O imposto novo (CBS + IBS) tem uma alíquota cheia, hoje estimada em <b>${pct(cheia)}</b>. Alguns serviços pagam só uma parte dela:</p>
+        <div class="faixas">
+          ${['cheia', '30', '40', '60', 'proprio'].map((f) => `<div class="faixa"><span class="badge ${FAIXAS[f].classe}">${FAIXAS[f].nome}</span>
+            <b>${efetiva(f)}</b><span class="muted small">${f === 'cheia' ? 'paga tudo' : f === 'proprio' ? 'regras específicas do setor' : `paga ${100 - FAIXAS[f].reducao}% da alíquota`}</span></div>`).join('')}
+        </div>
+        <p class="muted small">O que vale é a <b>atividade vendida</b>, não o nome da empresa. Uma clínica que também vende produtos paga alíquota cheia sobre os produtos.</p>
+      </section>
+      <section class="card">
+        <div class="fields">
+          <div><label>Buscar serviço</label><input id="busca-servico" placeholder="Ex.: dentista, restaurante, software, curso…"></div>
+          <div><label>Filtrar por faixa</label><select id="filtro-faixa"><option value="">Todas</option>${Object.keys(FAIXAS).map((f) => `<option value="${f}">${FAIXAS[f].nome}</option>`).join('')}</select></div>
+        </div>
+        <div id="lista-servicos" style="margin-top:14px"></div>
+      </section>
+      <div class="note info">Base: Lei Complementar 214/2025. As alíquotas finais ainda não foram fixadas e cada serviço depende do código NBS correto na nota. Use como guia e confirme o enquadramento com o contador.</div>`;
+
+    const normal = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    const desenhar = () => {
+      const termo = normal(document.getElementById('busca-servico').value.trim());
+      const faixa = document.getElementById('filtro-faixa').value;
+      const itens = SERVICOS.filter((s) => (!faixa || s.faixa === faixa) && (!termo || normal(s.servico + ' ' + s.exemplos + ' ' + s.grupo + ' ' + s.obs + ' ' + s.busca).includes(termo)));
+      const grupos = [...new Set(itens.map((s) => s.grupo))];
+      document.getElementById('lista-servicos').innerHTML = itens.length ? grupos.map((g) => `
+        <h3>${esc(g)}</h3>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Serviço</th><th>Enquadramento</th><th>Observação</th><th></th></tr></thead>
+          <tbody>${itens.filter((s) => s.grupo === g).map((s) => `<tr>
+            <td><b>${esc(s.servico)}</b><div class="muted small">${esc(s.exemplos)}</div></td>
+            <td><span class="badge ${FAIXAS[s.faixa].classe}">${esc(FAIXAS[s.faixa].nome)}</span><div class="small">${efetiva(s.faixa)}</div></td>
+            <td class="small">${esc(s.obs) || '—'}<div class="muted small">${esc(s.base)}</div></td>
+            <td class="num">${s.setor ? `<a class="btn small secondary" href="#/simulador/setor-${s.setor}">Simular</a>` : ''}</td>
+          </tr>`).join('')}</tbody></table></div>`).join('')
+        : '<p class="muted">Nenhum serviço encontrado. Tente outra palavra ou confirme com o contador.</p>';
+    };
+    document.getElementById('busca-servico').addEventListener('input', desenhar);
+    document.getElementById('filtro-faixa').addEventListener('change', desenhar);
+    desenhar();
   }
 
   // --- portal do cliente
@@ -1112,6 +1255,7 @@ ${lista(a.abertos)}
           break;
         case 'simulador': viewSimulador(b); break;
         case 'cenarios': viewCenarios(); break;
+        case 'servicos': viewServicos(); break;
         case 'portal': if (b) viewPortal(b); else viewPortalEscolha(); break;
         case 'atas':
           if (!b) viewAtas();

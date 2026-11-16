@@ -123,3 +123,8 @@ textarea { min-height: 80px; resize: vertical; }
 .cenarios .card { margin-bottom: 0; }
 .cenarios { margin-bottom: 18px; }
 tr.marcada td { background: var(--accent-soft); }
+
+.faixas { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 12px 0; }
+.faixa { border: 1px solid var(--line); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.faixa b { font-size: 1.2rem; }
+@media (max-width: 900px) { .faixas { grid-template-columns: repeat(2, 1fr); } }
