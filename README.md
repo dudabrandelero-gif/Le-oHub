@@ -40,7 +40,8 @@ tools/build_preview.py     # gera dist/preview.html (arquivo único) para demons
 Valores padrão, todos editáveis em **Parâmetros**:
 
 - CBS de referência: 11,30%. IBS de referência: 18,79%. **Ainda não definidas oficialmente.**
-- Redução por setor: saúde e educação 60%, profissões regulamentadas 30%, demais 0%.
+- Redução por tipo de atividade: saúde e educação regular (lista do Anexo II da LC 214/2025) 60%; profissões regulamentadas 30%; prestadores de serviços em geral, software/SaaS, cursos online/comunidades/infoprodutos e comércio 0% (alíquota cheia).
+- Cursos livres: há interpretações diferentes sobre a redução da educação, por isso o sistema assume alíquota cheia e recomenda confirmar com o contador.
 - PIS/COFINS: 3,65% cumulativo (Presumido) e 9,25% não cumulativo (Real).
 - Crédito sobre compras: alíquota cheia. Compras de fornecedores do Simples: 0%. Folha: não gera crédito.
 - Dividendos: isenção até R$ 50 mil/mês e 10% acima disso. Cenário de projeto de lei: 15% sobre qualquer valor.

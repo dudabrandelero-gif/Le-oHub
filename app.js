@@ -8,12 +8,45 @@
   const STORAGE_KEY = 'leaohub:v1';
 
   // ---------------------------------------------------------------- constantes
+  // Tipos de atividade. A redução vale para a ATIVIDADE vendida (não para a empresa toda).
   const SETORES = {
-    saude: { nome: 'Saúde (clínicas, odontologia)', reducao: 60 },
-    educacao: { nome: 'Educação', reducao: 60 },
-    profissional: { nome: 'Profissão regulamentada (contador, advogado etc.)', reducao: 30 },
-    geral: { nome: 'Geral (comércio e serviços)', reducao: 0 },
+    saude: {
+      nome: 'Saúde (clínica, consultório, odontologia)', reducao: 60,
+      dica: 'Serviços de saúde têm redução de 60%: paga-se 40% da alíquota.',
+    },
+    educacao: {
+      nome: 'Educação regular (escola, faculdade, curso técnico)', reducao: 60,
+      dica: 'Redução de 60% só para os serviços de ensino listados na lei (Anexo II da LC 214/2025). Outras vendas da escola pagam alíquota cheia.',
+    },
+    profissional: {
+      nome: 'Profissão regulamentada (contador, advogado, engenheiro, arquiteto…)', reducao: 30,
+      dica: 'Profissionais liberais de profissões regulamentadas têm redução de 30%.',
+    },
+    servicos: {
+      nome: 'Prestador de serviços em geral (agência, consultoria, marketing, gestão de tráfego)', reducao: 0,
+      dica: 'Sem redução: alíquota cheia. Hoje paga ISS (2% a 5%) + PIS/COFINS. Em compensação, ferramentas, anúncios e serviços comprados de empresas fora do Simples geram crédito.',
+    },
+    software: {
+      nome: 'Software e SaaS (vende sistemas, plataformas, assinaturas)', reducao: 0,
+      dica: 'Sem redução: alíquota cheia. Vender sistema para escolas NÃO dá direito à redução da educação, porque a redução vale para o ensino, não para o software. Nuvem, licenças e ferramentas compradas geram crédito.',
+    },
+    digital: {
+      nome: 'Cursos online, comunidades pagas e infoprodutos (mentorias, e-books)', reducao: 0,
+      dica: 'Em regra, alíquota cheia. Para "cursos livres" há interpretações diferentes sobre a redução da educação: confirme com o contador antes de usar.',
+    },
+    geral: {
+      nome: 'Comércio (venda de produtos)', reducao: 0,
+      dica: 'Sem redução: alíquota cheia, com crédito sobre as mercadorias compradas de empresas fora do Simples.',
+    },
   };
+  const dicaSetor = (k) => `<div class="muted small setor-dica" style="margin-top:4px">${esc((SETORES[k] || SETORES.geral).dica)}</div>`;
+  // Atualiza a dica abaixo de um select de setor quando ele muda.
+  document.addEventListener('change', (e) => {
+    if (e.target.matches && e.target.matches('select[data-setor]')) {
+      const alvo = e.target.parentElement.querySelector('.setor-dica');
+      if (alvo) alvo.outerHTML = dicaSetor(e.target.value);
+    }
+  });
   const REGIMES = {
     simples: 'Simples Nacional',
     presumido: 'Lucro Presumido',
@@ -217,7 +250,8 @@
       clientes: [
         { id: c1, nome: 'Clínica Sorriso Exemplo Ltda', cnpj: '00.000.000/0001-00', regime: 'presumido', setor: 'saude', contato: 'Dra. Ana (sócia)', email: 'contato@clinicaexemplo.com.br', faturamento: 50000, obs: 'Dentistas PJ com repasse por atendimento.' },
         { id: c2, nome: 'Mercado Bom Preço Exemplo', cnpj: '11.111.111/0001-11', regime: 'real', setor: 'geral', contato: 'Carlos (financeiro)', email: 'financeiro@mercadoexemplo.com.br', faturamento: 180000, obs: '' },
-        { id: c3, nome: 'Studio Design Exemplo ME', cnpj: '22.222.222/0001-22', regime: 'simples', setor: 'geral', contato: 'Júlia', email: 'julia@studioexemplo.com.br', faturamento: 25000, obs: 'Avaliar se continua no Simples após a reforma.' },
+        { id: c3, nome: 'Studio Design Exemplo ME', cnpj: '22.222.222/0001-22', regime: 'simples', setor: 'servicos', contato: 'Júlia', email: 'julia@studioexemplo.com.br', faturamento: 25000, obs: 'Avaliar se continua no Simples após a reforma.' },
+        { id: 'demo-saas', nome: 'EduTech Exemplo Ltda', cnpj: '33.333.333/0001-33', regime: 'presumido', setor: 'software', contato: 'Equipe financeira', email: 'financeiro@edutechexemplo.com.br', faturamento: 40000, obs: 'Vende plataforma para escolas (assinatura) e comunidade online.' },
       ],
       lancamentos: [
         { id: uid(), clienteId: c1, categoria: 'receita', descricao: 'Atendimentos do mês', valor: 50000, data: mes + '05', anexo: 'relatorio-atendimentos.pdf', status: 'conferido', origem: 'cliente' },
@@ -402,7 +436,7 @@
   function viewClienteForm(id) {
     const c = id ? cliente(id) : null;
     if (id && !c) return naoEncontrado();
-    const v = c || { nome: '', cnpj: '', regime: 'presumido', setor: 'geral', contato: '', email: '', faturamento: '', obs: '' };
+    const v = c || { nome: '', cnpj: '', regime: 'presumido', setor: 'servicos', contato: '', email: '', faturamento: '', obs: '' };
     $app.innerHTML = `
       <header class="page-head"><div><h1>${c ? 'Editar cliente' : 'Novo cliente'}</h1></div></header>
       <form class="card" id="form-cliente">
@@ -414,7 +448,7 @@
             <div id="cli-cnpj-res" class="small" style="margin-top:6px"></div></div>
           <div><label>Faturamento médio mensal (R$)</label><input name="faturamento" type="number" step="0.01" min="0" value="${esc(v.faturamento)}"></div>
           <div><label>Regime tributário</label><select name="regime">${opcoes(REGIMES, v.regime)}</select></div>
-          <div><label>Setor <span class="hint">(define a redução na reforma)</span></label><select name="setor">${opcoes(SETORES, v.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select></div>
+          <div><label>Tipo de atividade <span class="hint">(define a redução na reforma)</span></label><select name="setor" data-setor>${opcoes(SETORES, v.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select>${dicaSetor(v.setor)}</div>
           <div><label>Contato</label><input name="contato" value="${esc(v.contato)}"></div>
           <div><label>E-mail</label><input name="email" type="email" value="${esc(v.email)}"></div>
           <div class="full"><label>Observações</label><textarea name="obs">${esc(v.obs)}</textarea></div>
@@ -507,7 +541,7 @@
             <div><label>Regime atual</label><select name="regimeAtual">
               <option value="presumido" ${ini.regimeAtual === 'presumido' ? 'selected' : ''}>Lucro Presumido (PIS/COFINS ${pct(p.pisCofinsCumulativo)})</option>
               <option value="real" ${ini.regimeAtual === 'real' ? 'selected' : ''}>Lucro Real (PIS/COFINS ${pct(p.pisCofinsNaoCumulativo)} com créditos)</option></select></div>
-            <div><label>Setor</label><select name="setor">${opcoes(SETORES, ini.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select></div>
+            <div><label>Tipo de atividade</label><select name="setor" data-setor>${opcoes(SETORES, ini.setor, (s) => `${s.nome} — redução ${s.reducao}%`)}</select>${dicaSetor(ini.setor)}</div>
             ${campo('receita', 'Receita do mês (R$)', ini.receita)}
             ${campo('despReg', 'Compras de fornecedores fora do Simples (R$) <span class="hint">geram crédito</span>', ini.despReg)}
             ${campo('despSimples', 'Compras de fornecedores do Simples (R$)', ini.despSimples)}
@@ -648,7 +682,7 @@
       <form id="form-cen">
         <section class="card">
           <div class="fields">
-            <div><label>Setor da sua empresa</label><select name="setor">${opcoes(SETORES, 'saude', (s) => `${s.nome} (redução ${s.reducao}%)`)}</select></div>
+            <div><label>O que a sua empresa vende</label><select name="setor" data-setor>${opcoes(SETORES, 'saude', (s) => `${s.nome} (redução ${s.reducao}%)`)}</select>${dicaSetor('saude')}</div>
             <div><label>Quais tributos considerar</label><select name="escopo">
               <option value="cbs">Só CBS (substitui PIS/COFINS, vale a partir de 2027)</option>
               <option value="cbs_ibs">CBS + IBS (regime completo, a partir de 2033)</option></select></div>
@@ -676,7 +710,7 @@
             <p class="muted small">Exemplo: dentista que recebe repasse por atendimento.</p>
             <div class="fields">
               ${campo('c4Valor', 'Valor do repasse no mês (R$)', 8000)}
-              <div><label>Setor do parceiro</label><select name="c4Setor">${opcoes(SETORES, 'saude', (s) => s.nome)}</select></div>
+              <div><label>Atividade do parceiro</label><select name="c4Setor">${opcoes(SETORES, 'saude', (s) => s.nome)}</select></div>
             </div>
             <div id="r4"></div></section>
           <section class="card"><h2>5. Funcionário CLT ou PJ?</h2>
